@@ -1,0 +1,36 @@
+@import 'tailwindcss';
+
+/* Mirrors src/scenes/palette.ts — keep both in step. */
+:root {
+  --garage-wall: #ddd8cf;
+  --garage-floor: #3c454f;
+}
+
+body {
+  margin: 0;
+  background-color: var(--garage-wall);
+  color: #1f2328;
+  font-family:
+    ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Lenis owns the scroll position; native smooth scrolling would fight it. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+/* Trackpad pinch-zoom must not be captured by the smooth-scroll wrapper. */
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
