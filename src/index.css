@@ -16,6 +16,15 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Copy sits directly on the scene, so it needs its own contrast: a tight dark
+   halo plus a wider soft one so type holds up over the light wall and the dark
+   floor alike. */
+.copy-shadow {
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.55),
+    0 2px 14px rgb(0 0 0 / 0.45);
+}
+
 /* Lenis owns the scroll position; native smooth scrolling would fight it. */
 html.lenis,
 html.lenis body {

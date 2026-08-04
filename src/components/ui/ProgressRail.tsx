@@ -17,8 +17,8 @@ export function ProgressRail() {
   }, [])
 
   return (
-    <div className="pointer-events-none fixed top-1/2 right-6 z-20 hidden h-40 w-px -translate-y-1/2 bg-stone-400 md:block">
-      <div ref={fill} className="h-full w-full origin-top bg-stone-800" />
+    <div className="pointer-events-none fixed top-1/2 right-6 z-20 hidden h-40 w-px -translate-y-1/2 bg-stone-500/50 md:block">
+      <div ref={fill} className="h-full w-full origin-top bg-stone-100" />
     </div>
   )
 }
