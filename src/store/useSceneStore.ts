@@ -27,6 +27,11 @@ interface SceneState {
   /** Set by useDeviceTier; downgrades particles/post-processing. */
   lowPower: boolean
   prefersReducedMotion: boolean
+  /**
+   * Free-look ("360") mode. While true the scripted camera is suspended, page
+   * scroll is locked and the user orbits/pans the garage with the cursor.
+   */
+  freeLook: boolean
 
   setActiveSection: (id: SectionId) => void
   setScrollProgress: (p: number) => void
@@ -34,6 +39,8 @@ interface SceneState {
   setLoadProgress: (p: number) => void
   setLowPower: (low: boolean) => void
   setPrefersReducedMotion: (reduced: boolean) => void
+  setFreeLook: (on: boolean) => void
+  toggleFreeLook: () => void
 }
 
 export const useSceneStore = create<SceneState>((set) => ({
@@ -43,6 +50,7 @@ export const useSceneStore = create<SceneState>((set) => ({
   loadProgress: 0,
   lowPower: false,
   prefersReducedMotion: false,
+  freeLook: false,
 
   setActiveSection: (activeSection) => set({ activeSection }),
   setScrollProgress: (scrollProgress) => set({ scrollProgress }),
@@ -50,4 +58,6 @@ export const useSceneStore = create<SceneState>((set) => ({
   setLoadProgress: (loadProgress) => set({ loadProgress }),
   setLowPower: (lowPower) => set({ lowPower }),
   setPrefersReducedMotion: (prefersReducedMotion) => set({ prefersReducedMotion }),
+  setFreeLook: (freeLook) => set({ freeLook }),
+  toggleFreeLook: () => set((s) => ({ freeLook: !s.freeLook })),
 }))

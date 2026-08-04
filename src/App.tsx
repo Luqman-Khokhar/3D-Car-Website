@@ -3,9 +3,11 @@ import { ScrollSections } from '@/components/ui/ScrollSections'
 import { SceneCopy } from '@/components/ui/SceneCopy'
 import { ProgressRail } from '@/components/ui/ProgressRail'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
+import { FreeLookToggle } from '@/components/ui/FreeLookToggle'
 import { useSmoothScroll } from '@/hooks/useSmoothScroll'
 import { useDeviceTier } from '@/hooks/useDeviceTier'
 import { useAssemblyTimeline } from '@/hooks/useAssemblyTimeline'
+import { useFreeLookLock } from '@/hooks/useFreeLookLock'
 
 // three + @react-three are ~240kB gzip. Splitting them out of the entry lets the
 // copy layer and HUD paint immediately instead of waiting on the WebGL bundle.
@@ -16,6 +18,7 @@ function App() {
   useSmoothScroll()
   // Builds itself once the rig reports modelReady; see the hook.
   useAssemblyTimeline()
+  useFreeLookLock()
 
   return (
     <>
@@ -24,6 +27,7 @@ function App() {
         <Experience />
       </Suspense>
       <SceneCopy />
+      <FreeLookToggle />
       <ProgressRail />
       <ScrollSections />
     </>

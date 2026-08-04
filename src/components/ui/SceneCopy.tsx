@@ -11,9 +11,18 @@ import { scrollToTop } from '@/hooks/useSmoothScroll'
  */
 export function SceneCopy() {
   const activeSection = useSceneStore((s) => s.activeSection)
+  const freeLook = useSceneStore((s) => s.freeLook)
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-20 flex items-center px-8 md:px-20">
+    // Free look hides the whole copy layer: it is a full-height scrim over the
+    // left of the frame, which is exactly where the user is trying to orbit.
+    // `invisible` rather than opacity alone so the reveal button — the one
+    // element that opts back into pointer events — stops being clickable too.
+    <div
+      className={`pointer-events-none fixed inset-0 z-20 flex items-center px-8 transition-opacity duration-300 md:px-20 ${
+        freeLook ? 'invisible opacity-0' : 'opacity-100'
+      }`}
+    >
       {/* Scrim. The camera moves, so the floor/wall horizon crosses the copy at
           some scroll offsets, and the backdrop swings from light wall to dark
           floor. Instead of an opaque panel the copy rides on a translucent dark

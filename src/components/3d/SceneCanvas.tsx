@@ -5,6 +5,7 @@ import { CarModel } from './CarModel'
 import { GroundPlane } from './GroundPlane'
 import { Garage } from './Garage'
 import { CameraRig } from './CameraRig'
+import { FreeLookControls } from './FreeLookControls'
 import { GarageEnvironment } from './GarageEnvironment'
 import { DebugBridge } from './DebugBridge'
 import { debugEnabled } from '@/lib/debug'
@@ -21,6 +22,7 @@ const DPR: [number, number] = [1, 2]
  */
 export function SceneCanvas() {
   const lowPower = useSceneStore((s) => s.lowPower)
+  const freeLook = useSceneStore((s) => s.freeLook)
 
   return (
     <div className="fixed inset-0 z-0">
@@ -86,6 +88,8 @@ export function SceneCanvas() {
           )}
           <CarModel />
           <CameraRig />
+          {/* Mounted only in free look so exactly one system writes the camera. */}
+          {freeLook && <FreeLookControls />}
           {debugEnabled() && <DebugBridge />}
           </GarageEnvironment>
         </Suspense>
