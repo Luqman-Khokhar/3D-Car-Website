@@ -1,10 +1,14 @@
 import {
   BoxGeometry,
   CylinderGeometry,
+  ExtrudeGeometry,
+  Path,
+  Shape,
   TorusGeometry,
   Euler,
   Matrix4,
   Quaternion,
+  Vector2,
   Vector3,
 } from 'three'
 import type { BufferGeometry } from 'three'
@@ -36,6 +40,25 @@ function build(primitive: Primitive): BufferGeometry {
   if (primitive.kind === 'cylinder') {
     const [rTop, rBottom, height, radial] = primitive.args
     return new CylinderGeometry(rTop, rBottom, height, radial, 1, primitive.openEnded === true)
+  }
+  if (primitive.kind === 'prism') {
+    const shape = new Shape(primitive.points.map(([z, y]) => new Vector2(z, y)))
+    for (const hole of primitive.holes ?? []) {
+      // Holes wind opposite to the outline, or the extruded wall normals point
+      // into the ring instead of out of it.
+      shape.holes.push(new Path([...hole].reverse().map(([z, y]) => new Vector2(z, y))))
+    }
+    const geometry = new ExtrudeGeometry(shape, {
+      depth: primitive.depth,
+      bevelEnabled: false,
+    })
+    // A Shape lives in XY and extrudes along +Z from the origin. Centre that
+    // extrusion, then swing the profile into the flank plane so its authored
+    // [z, y] coordinates land on Z and Y and the thickness runs along X. Baking
+    // it here keeps the rotation field free for the panel's own tumblehome.
+    geometry.translate(0, 0, -primitive.depth / 2)
+    geometry.rotateY(-Math.PI / 2)
+    return geometry
   }
   const [radius, tube, radialSegments, tubularSegments] = primitive.args
   return new TorusGeometry(radius, tube, radialSegments, tubularSegments, primitive.arc)

@@ -36,6 +36,25 @@ export type Primitive =
        *  lip rather than a full ring. */
       arc?: number
     })
+  | (PrimitiveBase & {
+      kind: 'prism'
+      /**
+       * Outline as [z, y] pairs in the primitive's own frame, wound
+       * counter-clockwise, extruded along X. A box can only ever be a rectangle
+       * in the flank plane, and the one panel on a car that is never a rectangle
+       * is the side glass — its front and rear edges lean with the A- and
+       * C-pillars.
+       */
+      points: Point2[]
+      /** Inner outlines cut out of the face. The glass surrounds are rings, not
+       *  plates: a solid plate behind a transparent pane tints the whole window. */
+      holes?: Point2[][]
+      /** Thickness along X, centred on the origin. */
+      depth: number
+    })
+
+/** [z, y] in a primitive's own frame. */
+export type Point2 = [number, number]
 
 export type MaterialKey =
   | 'bodyPaint'
@@ -637,6 +656,127 @@ function door(side: number): Primitive[] {
 }
 
 /**
+ * Pushes a closed counter-clockwise outline out along its own edge normals.
+ *
+ * Each glass surround is derived from the pane it frames, so the frit band has
+ * to keep a constant width round a shape whose edges are not parallel. Scaling
+ * the outline about its centroid — the obvious cheap trick — leaves the band
+ * twice as wide along the long bottom edge as along the short top one, which
+ * reads as a rubber seal that has slipped out of its channel.
+ *
+ * Straight offsetting with no self-intersection cleanup: the outlines here are
+ * convex quadrilaterals, so adjacent offset edges always meet at one point.
+ *
+ * @param distance positive outwards, negative inwards
+ */
+function offsetOutline(points: Point2[], distance: number): Point2[] {
+  const count = points.length
+  const edges = points.map((p, i): [Point2, Point2] => {
+    const q = points[(i + 1) % count]
+    const dz = q[0] - p[0]
+    const dy = q[1] - p[1]
+    const length = Math.hypot(dz, dy)
+    // Outward normal of a counter-clockwise edge.
+    const nz = (dy / length) * distance
+    const ny = (-dz / length) * distance
+    return [
+      [p[0] + nz, p[1] + ny],
+      [q[0] + nz, q[1] + ny],
+    ]
+  })
+  return points.map(([pz, py], i): Point2 => {
+    const [a, b] = edges[(i - 1 + count) % count]
+    const [c, d] = edges[i]
+    const r: Point2 = [b[0] - a[0], b[1] - a[1]]
+    const s: Point2 = [d[0] - c[0], d[1] - c[1]]
+    const denominator = r[0] * s[1] - r[1] * s[0]
+    // Collinear neighbours have no corner to solve for; the vertex has already
+    // been carried along the one shared normal.
+    if (Math.abs(denominator) < 1e-9) return [b[0], b[1]]
+    const t = ((c[0] - a[0]) * s[1] - (c[1] - a[1]) * s[0]) / denominator
+    const corner: Point2 = [a[0] + t * r[0], a[1] + t * r[1]]
+
+    // Miter limit. The front lower corner of the door glass closes to about
+    // 25 degrees, and an unclamped miter there runs 110 mm past the vertex —
+    // a black spike sticking out of the A-pillar foot, four times the width of
+    // the band it belongs to. Clamping trades a truly sharp corner for a
+    // slightly blunt one, which is what the corner of a real pane looks like.
+    const reach = Math.hypot(corner[0] - pz, corner[1] - py)
+    const limit = Math.abs(distance) * 2
+    if (reach <= limit) return corner
+    return [pz + ((corner[0] - pz) / reach) * limit, py + ((corner[1] - py) / reach) * limit]
+  })
+}
+
+/**
+ * The daylight opening down one side: door glass, rear quarter glass, the
+ * B-pillar between them, and a frit ring round each pane.
+ *
+ * Everything is authored in the roof part's frame, since the roof is the only
+ * greenhouse part with no rotation of its own. The glass band runs from the
+ * beltline at roof-local y -0.345 to the roof underside at -0.045, so the panes
+ * are 0.30 m tall about a -0.195 origin and the outlines below are +/-0.15.
+ *
+ * The sloped edges are taken off the pillars they sit against rather than
+ * eyeballed. The A-pillar's axis moves 2.122 m in z per metre of drop and the
+ * C-pillar's 0.842 m the other way, so across the 0.30 m band the front edge
+ * leans 0.64 m back and the rear edge 0.25 m forward as they rise. That is why
+ * the rectangular slabs these replace looked wrong from every three-quarter
+ * angle: a pane with vertical ends leaves a wedge of daylight under each raked
+ * pillar, and the eye reads the wedge long before it reads the glass.
+ *
+ * Panes are cut 30-50 mm inboard of the pillar axes so the pillars frame them
+ * instead of fighting them for the same millimetres.
+ */
+function sideGlazing(side: number): Primitive[] {
+  const rotation: Vec3 = [0, 0, side * 0.052]
+  const x = side * 0.89
+
+  // Front edge on the A-pillar, rear edge on the C-pillar, and a B-pillar split
+  // at roof-local z 0.03 — the door's rear shut line, so the division in the
+  // glass lands on the division in the sheet metal below it.
+  const doorGlass: Point2[] = [
+    [1.18, -0.15],
+    [0.542, 0.15],
+    [0.01, 0.15],
+    [0.05, -0.15],
+  ]
+  const quarterGlass: Point2[] = [
+    [0.0, -0.15],
+    [-0.04, 0.15],
+    [-0.444, 0.15],
+    [-0.697, -0.15],
+  ]
+
+  return [
+    ...[doorGlass, quarterGlass].flatMap((pane): Primitive[] => [
+      { kind: 'prism', points: pane, depth: 0.02, position: [x, -0.195, 0], rotation, material: 'glass' },
+      // Frit ring: a 24 mm band round the pane, overlapping its edge by 4 mm so
+      // the cut edge is never the outline anyone sees. Thicker than the pane so
+      // no face is coplanar with it — coplanar solids z-fight into stripes.
+      {
+        kind: 'prism',
+        points: offsetOutline(pane, 0.024),
+        holes: [offsetOutline(pane, -0.004)],
+        depth: 0.026,
+        position: [x, -0.195, 0],
+        rotation,
+        material: 'shadow',
+      },
+    ]),
+    // B-pillar, filling the 60 mm gap left between the two panes and raked to
+    // match their facing edges.
+    {
+      kind: 'box',
+      args: [0.028, 0.302, 0.062],
+      position: [x, -0.195, 0.005],
+      rotation: [-0.1326, 0, side * 0.052],
+      material: 'shadow',
+    },
+  ]
+}
+
+/**
  * Generic sports-car proxy. Part names match the GLB contract in
  * public/models/README.md, so swapping in a real model does not touch any
  * timeline code.
@@ -916,24 +1056,16 @@ export const CAR_PARTS: CarPart[] = [
       // Frit round its top and bottom edges, matching the side glass.
       { kind: 'box', args: [1.38, 0.03, 0.03], position: [0, -0.026, -0.474], rotation: [0.7, 0, 0], material: 'shadow' },
       { kind: 'box', args: [1.38, 0.03, 0.03], position: [0, -0.339, -0.737], rotation: [0.7, 0, 0], material: 'shadow' },
-      // Side glass, filling beltline (0.90) to roof (1.21). Carried by the roof
+      // Side glazing, filling beltline (0.90) to roof (1.21). Carried by the roof
       // rather than the windshield part because the roof frame is unrotated, so
-      // these coordinates stay readable. Inboard of the pillars at x 0.76.
+      // the coordinates in `sideGlazing` stay readable against the pillars above.
       //
       // Tilted 3 deg inboard at the top: tumblehome. Every road car has it, and
       // vertical glass on a tapering body is what makes a greenhouse read as a
       // bus. The rotation moves the top edge 8 mm in and the sill 8 mm out, which
       // still lands inside the door's 70 mm thickness at the beltline.
-      { kind: 'box', args: [0.02, 0.3, 1.45], position: [-0.89, -0.195, 0.325], rotation: [0, 0, -0.052], material: 'glass' },
-      { kind: 'box', args: [0.02, 0.3, 1.45], position: [0.89, -0.195, 0.325], rotation: [0, 0, 0.052], material: 'glass' },
-      // Glass surround. Dark, thin, and standing just outboard of the pane: the
-      // black frit band round automotive glazing. Without it the glass ends on a
-      // bare cut edge and reads as perspex.
-      ...[-1, 1].flatMap((side): Primitive[] => [
-        // Top edge leans in with the pane (0.89 - 0.15 sin 0.052), bottom leans out.
-        { kind: 'box', args: [0.024, 0.028, 1.45], position: [side * 0.882, -0.048, 0.325], rotation: [0, 0, side * 0.052], material: 'shadow' },
-        { kind: 'box', args: [0.024, 0.028, 1.45], position: [side * 0.898, -0.342, 0.325], rotation: [0, 0, side * 0.052], material: 'shadow' },
-      ]),
+      ...sideGlazing(-1),
+      ...sideGlazing(1),
     ],
   },
   {
