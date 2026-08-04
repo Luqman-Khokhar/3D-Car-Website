@@ -37,7 +37,8 @@ function build(primitive: Primitive): BufferGeometry {
     const [rTop, rBottom, height, radial] = primitive.args
     return new CylinderGeometry(rTop, rBottom, height, radial, 1, primitive.openEnded === true)
   }
-  return new TorusGeometry(...primitive.args)
+  const [radius, tube, radialSegments, tubularSegments] = primitive.args
+  return new TorusGeometry(radius, tube, radialSegments, tubularSegments, primitive.arc)
 }
 
 export interface MergedGroup {
