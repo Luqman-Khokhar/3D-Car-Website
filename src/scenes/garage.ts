@@ -339,6 +339,15 @@ function floorMarkings(): Prop[] {
  * Left-wall dressing: a high window, a clock, and signage. The establishing shot
  * looks straight at this wall, and a 17 m blank expanse reads as unfinished.
  */
+const CLOCK_Y = 2.45
+const CLOCK_Z = -0.6
+
+/**
+ * Front face of the wall clock, in world space. The hands are rendered outside
+ * the merged geometry so they can turn, and hang off this point.
+ */
+export const CLOCK_FACE_CENTER: Vec3 = [LEFT + 0.16, CLOCK_Y, CLOCK_Z]
+
 function leftWallDetail(): Prop[] {
   const x = LEFT + 0.06
   const props: Prop[] = []
@@ -353,11 +362,25 @@ function leftWallDetail(): Prop[] {
   // Sill.
   props.push(box([0.16, 0.06, 2.6], [x + 0.04, wy - 0.6, wz], 'wall'))
 
-  // Wall clock.
-  props.push(cyl([0.26, 0.26, 0.07, 20], [x + 0.04, 2.45, -0.6], 'wall', [0, 0, Math.PI / 2]))
-  props.push(cyl([0.22, 0.22, 0.02, 20], [x + 0.09, 2.45, -0.6], 'ceiling', [0, 0, Math.PI / 2]))
-  props.push(box([0.02, 0.03, 0.16], [x + 0.11, 2.45, -0.55], 'darkMetal'))
-  props.push(box([0.02, 0.11, 0.02], [x + 0.11, 2.5, -0.6], 'darkMetal'))
+  // Wall clock. Bezel, face and hour ticks are static and merged with the rest of
+  // the room; the hands are live (see WallClock) and mount at CLOCK_FACE_CENTER.
+  props.push(cyl([0.26, 0.26, 0.07, 20], [x + 0.04, CLOCK_Y, CLOCK_Z], 'wall', [0, 0, Math.PI / 2]))
+  props.push(cyl([0.22, 0.22, 0.02, 20], [x + 0.09, CLOCK_Y, CLOCK_Z], 'ceiling', [0, 0, Math.PI / 2]))
+  // Hour ticks, so the hands read as a time rather than as two sticks. Rotating
+  // about X keeps a tick flat against the face, whose normal is +X.
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2
+    const r = 0.185
+    const quarter = i % 3 === 0
+    props.push(
+      box(
+        [0.012, quarter ? 0.044 : 0.024, quarter ? 0.018 : 0.012],
+        [x + 0.1, CLOCK_Y + r * Math.cos(a), CLOCK_Z - r * Math.sin(a)],
+        'darkMetal',
+        [-a, 0, 0],
+      ),
+    )
+  }
 
   // Signage boards.
   props.push(box([0.03, 0.42, 0.32], [x + 0.05, 2.3, 6.4], 'redPaint'))

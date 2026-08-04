@@ -1,4 +1,5 @@
-import { memo, useEffect, useMemo } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import {
   BoxGeometry,
   CylinderGeometry,
@@ -10,9 +11,9 @@ import {
   Quaternion,
   Vector3,
 } from 'three'
-import type { BufferGeometry, Material } from 'three'
+import type { BufferGeometry, Group, Material, Texture } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { GARAGE_PROPS } from '@/scenes/garage'
+import { CLOCK_FACE_CENTER, GARAGE_PROPS } from '@/scenes/garage'
 import type { GarageMaterialKey, Prop } from '@/scenes/garage'
 import { GARAGE_WALL } from '@/scenes/palette'
 import { useEnvironmentMap } from './environmentContext'
@@ -78,6 +79,106 @@ const MATERIAL_SPECS: Record<GarageMaterialKey, MaterialSpec> = {
   lamp: { color: '#f2efe4', emissive: '#fff6e2', emissiveIntensity: 1.1, matte: true },
 }
 
+function createMaterial(spec: MaterialSpec, envMap: Texture | null): Material {
+  const { matte, ...params } = spec
+  return matte
+    ? new MeshLambertMaterial({
+        color: params.color,
+        emissive: params.emissive,
+        emissiveIntensity: params.emissiveIntensity,
+      })
+    : new MeshStandardMaterial({ ...params, envMap, envMapIntensity: 0.7 })
+}
+
+/**
+ * A clock hand: a bar whose pivot sits at one end rather than at its centre, so
+ * the parent group's rotation swings it about the clock's centre. `depth` lifts
+ * it off the face far enough to clear the hand behind it.
+ */
+function handGeometry(length: number, width: number, depth: number): BufferGeometry {
+  const geometry = new BoxGeometry(0.014, length, width)
+  // Overhang past the pivot, so the hand looks pinned rather than hinged.
+  geometry.translate(depth, length / 2 - length * 0.14, 0)
+  return geometry
+}
+
+/**
+ * Wall-clock hands, driven off the system clock so the garage shows the viewer's
+ * real local time.
+ *
+ * The face normal is +X and the camera is on the +X side of it, which puts the
+ * viewer's right at -Z. A positive rotation about X carries +Y toward +Z, i.e.
+ * anticlockwise on screen — hence the negated angles below.
+ *
+ * Rotations are written straight onto the groups in useFrame rather than held in
+ * state: this runs every frame, and re-rendering React 60 times a second for
+ * three quaternions would cost far more than the hands are worth.
+ */
+const WallClock = memo(function WallClock() {
+  const envMap = useEnvironmentMap()
+  const hour = useRef<Group>(null)
+  const minute = useRef<Group>(null)
+  const second = useRef<Group>(null)
+
+  const parts = useMemo(() => {
+    const dark = createMaterial(MATERIAL_SPECS.darkMetal, envMap)
+    const red = createMaterial(MATERIAL_SPECS.redPaint, envMap)
+    return {
+      dark,
+      red,
+      hour: handGeometry(0.115, 0.018, 0.006),
+      minute: handGeometry(0.17, 0.014, 0.013),
+      second: handGeometry(0.185, 0.008, 0.02),
+      cap: new CylinderGeometry(0.014, 0.014, 0.05, 10),
+    }
+  }, [envMap])
+
+  useEffect(() => {
+    return () => {
+      parts.dark.dispose()
+      parts.red.dispose()
+      parts.hour.dispose()
+      parts.minute.dispose()
+      parts.second.dispose()
+      parts.cap.dispose()
+    }
+  }, [parts])
+
+  useFrame(() => {
+    const now = new Date()
+    const s = now.getSeconds()
+    const m = now.getMinutes()
+    const h = now.getHours() % 12
+    const turn = Math.PI * 2
+    // The seconds hand steps once a second the way a quartz movement does; the
+    // other two sweep, because a minute hand that only jumps reads as broken.
+    if (second.current) second.current.rotation.x = -(s / 60) * turn
+    if (minute.current) minute.current.rotation.x = -((m + s / 60) / 60) * turn
+    if (hour.current) hour.current.rotation.x = -((h + m / 60) / 12) * turn
+  })
+
+  return (
+    <group position={CLOCK_FACE_CENTER} name="wallClock">
+      <group ref={hour}>
+        <mesh geometry={parts.hour} material={parts.dark} />
+      </group>
+      <group ref={minute}>
+        <mesh geometry={parts.minute} material={parts.dark} />
+      </group>
+      <group ref={second}>
+        <mesh geometry={parts.second} material={parts.red} />
+      </group>
+      {/* Centre boss, hiding where the three hands overlap. */}
+      <mesh
+        geometry={parts.cap}
+        material={parts.dark}
+        position={[0.014, 0, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+      />
+    </group>
+  )
+})
+
 /**
  * Static garage interior: shell, tool wall, workbench, shelving, roller cabinet,
  * drums, sectional door and ceiling strips.
@@ -107,15 +208,7 @@ export const Garage = memo(function Garage() {
       const merged = mergeGeometries(geometries)
       // mergeGeometries copies vertex data out, so the sources are now dead weight.
       for (const geometry of geometries) geometry.dispose()
-      const spec = MATERIAL_SPECS[key]
-      const { matte, ...params } = spec
-      const material: Material = matte
-        ? new MeshLambertMaterial({
-            color: params.color,
-            emissive: params.emissive,
-            emissiveIntensity: params.emissiveIntensity,
-          })
-        : new MeshStandardMaterial({ ...params, envMap, envMapIntensity: 0.7 })
+      const material = createMaterial(MATERIAL_SPECS[key], envMap)
 
       return { key, geometry: merged, material }
     })
@@ -137,6 +230,7 @@ export const Garage = memo(function Garage() {
           <mesh key={group.key} geometry={group.geometry} material={group.material} />
         ) : null,
       )}
+      <WallClock />
     </group>
   )
 })
