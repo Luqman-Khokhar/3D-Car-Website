@@ -20,11 +20,16 @@ const FILL_FLOOR = 0.05
 
 /** Peak candela of one headlight beam at `frontGlow === 1`. */
 const BEAM_INTENSITY = 78
-/** Peak intensity of the red wash one tail cluster throws behind the car. Kept
- *  deliberately low: at anything higher the inverse-square falloff still reaches
- *  the roof and the whole car turns pink, which reads as a tinted render rather
- *  than as lamps lighting what is near them. */
-const TAIL_WASH_INTENSITY = 2.2
+/**
+ * Peak intensity of the red wash one half of the tail bar throws behind the car.
+ *
+ * Very low, and it has been cut twice. The bar itself is emissive and blooms, so
+ * it already lights its own surroundings visually; this only has to put a hint of
+ * red on the bumper and the floor. Every value tried above this washed the whole
+ * tail — deck lid, quarters, roof — in flat red, which turns the shot into a
+ * colour filter over a car instead of a car with its lights on.
+ */
+const TAIL_WASH_INTENSITY = 0.45
 
 /** Baseline intensities, so the dim driver has something to scale against
  *  without re-reading JSX defaults. Must stay in step with the elements below. */
@@ -210,12 +215,17 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
         decay={1.5}
         color="#fff0d2"
       />
-      {/* Tail clusters. Point lights rather than spots: a tail lamp's job here is
-          to stain the bumper, the diffuser and the floor immediately behind the
-          car red, not to throw a beam. Short `distance` keeps that wash local so
-          it never tints the back wall. */}
-      <pointLight ref={tailL} position={[-0.6, 0.79, -2.02]} intensity={0} distance={2.6} decay={2} color="#ff2a18" />
-      <pointLight ref={tailR} position={[0.6, 0.79, -2.02]} intensity={0} distance={2.6} decay={2} color="#ff2a18" />
+      {/* Tail bar. Point lights rather than spots: the bar's job here is to stain
+          the bumper, the diffuser and the floor immediately behind the car red,
+          not to throw a beam. Short `distance` keeps that wash local so it never
+          tints the back wall — at anything longer the inverse-square falloff still
+          reaches the roof and the whole car turns pink.
+
+          One per half of the bar, sitting behind the centre of each half rather
+          than at the old lens positions, so the spill spreads along the full width
+          of the lamp instead of pooling under two points on it. */}
+      <pointLight ref={tailL} position={[-0.45, 0.78, -2.0]} intensity={0} distance={2.4} decay={2} color="#ff2a18" />
+      <pointLight ref={tailR} position={[0.45, 0.78, -2.0]} intensity={0} distance={2.4} decay={2} color="#ff2a18" />
     </>
   )
 }

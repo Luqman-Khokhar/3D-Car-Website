@@ -17,7 +17,10 @@ const LAMP_RED_BASE = 1.9
 /** Multiplier added on top at full glow. Chosen so the lamps clear the bloom
  *  threshold (0.9 in PostFX) by a wide margin rather than by a hair. */
 const LAMP_WHITE_GAIN = 3.6
-const LAMP_RED_GAIN = 3.2
+// Lower than the white side on purpose. Red's luminance coefficient is a fifth of
+// green's, so a red emissive has to run much hotter than a white one to cross the
+// same bloom threshold — and pushed that far it stops looking red.
+const LAMP_RED_GAIN = 1.4
 
 interface Emissive {
   emissiveIntensity: number

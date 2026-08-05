@@ -81,16 +81,22 @@ export function buildAssemblyTimeline() {
 
   // --- Atmosphere --------------------------------------------------------
   // The two lighting scenes are the only place the garage's exposure moves, and
-  // it moves in one direction and back: dusk for the tail lamps, blackout for the
-  // headlights, full lighting again by the time paint starts (a metallic base
-  // coat under clearcoat has nothing to show in a dark room).
+  // it moves in one direction and back: full blackout across both of them, then
+  // full lighting again by the time paint starts (a metallic base coat under
+  // clearcoat has nothing to show in a dark room).
+  //
+  // Both go all the way to 1. A half-dim for the tail was the first pass and it
+  // was the wrong call: the lamp is the only light source in the shot, so the
+  // room has to be dark enough for its own spill to be the brightest thing on the
+  // bodywork. At 0.55 the bay lighting was still winning and the bar read as red
+  // plastic rather than as something switched on.
   //
   // Each `to` starts where the previous one ended, so a reverse scrub retraces
   // the same curve — see the file header on why nothing here is eased.
   tl.set(lightingState, { dim: 0, rearGlow: 0, frontGlow: 0 }, 0)
   tl.to(
     lightingState,
-    { dim: 0.55, rearGlow: 1, duration: SCENE_DURATION },
+    { dim: 1, rearGlow: 1, duration: SCENE_DURATION },
     sceneTime('tail-lamps') - SCENE_DURATION,
   )
   tl.to(
@@ -98,6 +104,8 @@ export function buildAssemblyTimeline() {
     // Rear falls back to a running-light level rather than off: the camera is at
     // the nose by now, and a tail that switched itself off behind the viewer is
     // the kind of thing only noticed on the way back up the page.
+    // dim is already 1 and stays there; restating it pins the value rather than
+    // leaving this tween to pick up whatever the previous one left behind.
     { dim: 1, rearGlow: 0.4, frontGlow: 1, duration: SCENE_DURATION },
     sceneTime('head-lamps') - SCENE_DURATION,
   )

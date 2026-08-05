@@ -617,6 +617,62 @@ function shutLine(axis: 'x' | 'y', size: [number, number, number], inset: number
   return { kind: 'box', args: size, position, material: 'shadow' }
 }
 
+/** Half-width of the tail light bar. Stops 80 mm short of the rear quarters so
+ *  the lens is set into the tail rather than running off the corners of it. */
+const TAIL_BAR_HALF = 0.84
+/** Segment count. Even, because the pair either side of the centreline is what
+ *  splits the bar into a left and a right lamp. */
+const TAIL_BAR_SEGMENTS = 12
+/** Gap between neighbouring segments, and the wider break on the centreline. */
+const TAIL_BAR_GAP = 0.011
+const TAIL_BAR_CENTRE_GAP = 0.055
+/** How far the outermost segment sits below the flat middle of the bar. */
+const TAIL_BAR_DROP = 0.046
+/**
+ * Segment height. Deliberately slim: at 52 mm the segments read as a row of
+ * separate lit blocks, and the shape being aimed at is a line. A tail bar is
+ * recognisable by its length against its thickness, and nothing else.
+ */
+const TAIL_BAR_HEIGHT = 0.036
+
+/**
+ * The full-width rear light bar, in the `lamps_rear` part's local frame.
+ *
+ * A row of separate segments rather than one long emissive box, for two reasons.
+ * The gaps let the dark housing behind show through, which is what makes the bar
+ * read as lit elements set into a trough instead of a painted stripe; and the
+ * wider break on the centreline is what tells the eye there are two lamps here,
+ * a left and a right, the way the split in a real full-width tail lamp does.
+ *
+ * The quartic drop keeps the middle dead flat and hooks only the last segment or
+ * two down at the corners. A constant curve across the whole width bows the bar
+ * like a smile and immediately reads as a cartoon face; the flat-then-hook shape
+ * is what modern light bars actually do, and it also follows the tail's own
+ * corner radius rather than cutting across it.
+ */
+function tailLightBar(): Primitive[] {
+  const span = TAIL_BAR_HALF * 2
+  const width =
+    (span - TAIL_BAR_GAP * (TAIL_BAR_SEGMENTS - 2) - TAIL_BAR_CENTRE_GAP) / TAIL_BAR_SEGMENTS
+
+  const segments: Primitive[] = []
+  let cursor = -TAIL_BAR_HALF
+
+  for (let i = 0; i < TAIL_BAR_SEGMENTS; i++) {
+    const centre = cursor + width / 2
+    const t = centre / TAIL_BAR_HALF
+    segments.push({
+      kind: 'box',
+      args: [width, TAIL_BAR_HEIGHT, 0.022],
+      position: [centre, -TAIL_BAR_DROP * t ** 4, -0.028],
+      material: 'lampRed',
+    })
+    cursor += width + (i === TAIL_BAR_SEGMENTS / 2 - 1 ? TAIL_BAR_CENTRE_GAP : TAIL_BAR_GAP)
+  }
+
+  return segments
+}
+
 /**
  * Door skin, shut line, handle and door mirror.
  *
@@ -918,17 +974,18 @@ export const CAR_PARTS: CarPart[] = [
       { kind: 'box', args: [0.1, 0.28, 0.66], position: [0.91, 0.8, -1.32] },
       // Rear closing panel.
       { kind: 'box', args: [1.84, 0.4, 0.08], position: [0, 0.74, -1.86] },
-      // --- Tail lamp housings. A flat emissive rectangle reads as a sticker no
-      // matter how it is tuned, so each side is a dark housing with lit rings set
-      // into it — the housing gives the lens somewhere to sit and something to
-      // shade against. Only the housings belong to the shell: the lit elements are
-      // their own part so the tail-lamps scene can fit them, see `lamps_rear`.
-      ...[-1, 1].map((side): Primitive => (
-        { kind: 'box', args: [0.46, 0.16, 0.06], position: [side * 0.6, 0.79, -1.895], material: 'shadow' }
-      )),
-      // Rear plate, recessed below the lamps. Both this and the reverse lamps sit
-      // above y 0.61, which is where the bumper skin now tops out — below that
-      // line the bumper hides them and all that escapes is a glow along its edge.
+      // --- Tail lamp housing: one dark trough running the full width of the tail
+      // rather than a pocket per side. The light bar that drops into it in the
+      // tail-lamps scene is continuous across the car (see `lamps_rear`), and a
+      // bar crossing two separate pockets with painted panel between them reads as
+      // a decal laid over the bodywork instead of as a lens set into it.
+      // Sized to hug the bar — 110 mm tall, dropped 20 mm below its centreline so
+      // it follows the hooked ends. A taller trough leaves painted panel showing
+      // above the lens that then catches the bloom halo, and the lamp ends up
+      // framed in a glowing rectangle.
+      { kind: 'box', args: [1.8, 0.11, 0.06], position: [0, 0.768, -1.895], material: 'shadow' },
+      // Rear plate, recessed below the bar. Sits above y 0.61, which is where the
+      // bumper skin tops out — below that line the bumper hides it entirely.
       { kind: 'box', args: [0.56, 0.15, 0.02], position: [0, 0.68, -1.895], material: 'shadow' },
       { kind: 'box', args: [0.52, 0.125, 0.012], position: [0, 0.68, -1.908], material: 'plate' },
       // Front fascia, closing the nose between the wings. Sits below the hood
@@ -1196,7 +1253,7 @@ export const CAR_PARTS: CarPart[] = [
     // Origin at the centre of the rear cluster rather than at the car's, so the
     // exploded rotation below tips the lamps into their housings instead of
     // swinging them through an arc two metres wide.
-    position: [0, 0.76, -1.9],
+    position: [0, 0.787, -1.9],
     // Lowered in from above and behind. The obvious offset — straight back along
     // -Z — drags the lenses through the rear bumper, which is already installed
     // by this scene. Everything above y 0.61 is clear of it, so the approach
@@ -1208,28 +1265,11 @@ export const CAR_PARTS: CarPart[] = [
     // over the deck lid during the body-panels scene is not a subtle mistake.
     explodedOffset: [0, 0.34, -0.26],
     explodedRotation: [-0.5, 0, 0],
-    primitives: [
-      ...[-1, 1].flatMap((side): Primitive[] => [
-        // Torus normals already face +Z, so no rotation is needed to aim these
-        // out of the back of the car.
-        {
-          kind: 'torus',
-          args: [0.052, 0.017, 8, 20],
-          position: [side * 0.52, 0.035, -0.025],
-          material: 'lampRed',
-        },
-        {
-          kind: 'torus',
-          args: [0.052, 0.017, 8, 20],
-          position: [side * 0.68, 0.035, -0.025],
-          material: 'lampRed',
-        },
-        // Reverse lamp. Kept small and moved down beside the plate: sitting
-        // directly under the pair of red rings it read as a mouth under two eyes,
-        // which is all anyone could see afterwards.
-        { kind: 'box', args: [0.12, 0.03, 0.03], position: [side * 0.42, -0.08, -0.025], material: 'lampWhite' },
-      ]),
-    ],
+    // Nothing but the bar. There were reverse lamps flanking the plate here, and
+    // in a blacked-out room two white dots below a full-width red bar are the only
+    // thing the eye goes to — they compete with the one shape this scene exists
+    // to show. Reversing lights on a car parked in a garage are also off.
+    primitives: tailLightBar(),
   },
   {
     id: 'lamps_front',

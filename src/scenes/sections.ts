@@ -56,8 +56,8 @@ export const SECTION_COPY: SectionCopy[] = [
   {
     id: 'tail-lamps',
     label: '05 / Rear Lighting',
-    title: 'Brake First',
-    body: 'Lenses press into the tail housings and the bay lights come down to dusk. Red is the one colour a car has to be read by from behind, and it only proves itself once the room stops competing with it.',
+    title: 'One Red Line',
+    body: 'A full-width bar drops into the tail trough and the bay goes black around it. Twelve segments, split down the centre into a left lamp and a right. From behind, in the dark, this is the entire car.',
   },
   {
     id: 'head-lamps',
