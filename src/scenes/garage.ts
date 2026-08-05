@@ -15,6 +15,20 @@ export type GarageMaterialKey =
   | 'drum'
   | 'marking'
   | 'glass'
+  /** Galvanised conduit, trunking, door hardware. Bright, slightly rough metal. */
+  | 'galv'
+  /** Weathered, oxidised steel — brackets, older fixings, the drum ribs. */
+  | 'rust'
+  /** Safety yellow: bollards, floor hatching, the cord reel. */
+  | 'yellow'
+  /** Painted dado band around the base of the walls. */
+  | 'dado'
+  /** Exposed ceiling steelwork. Painted, not bare — bare metal up there reads as
+   *  a black bar because almost no light reaches the underside of a joist. */
+  | 'structure'
+  /** Slab joints, drain slots and other recesses. Dark and dead matte, so they
+   *  read as gaps rather than as painted lines. */
+  | 'seam'
 
 export type Prop =
   | { kind: 'box'; args: [number, number, number]; position: Vec3; rotation?: Vec3; material: GarageMaterialKey }
@@ -79,7 +93,9 @@ function shell(): Prop[] {
     box([WALL_T, h, d], [ROOM_HALF_X, h / 2, 0], 'wall'),
     box([w, WALL_T, d], [0, h, 0], 'ceiling'),
     // Skirting, breaking the wall/floor join so it does not read as a seam.
-    box([w, 0.16, 0.1], [0, 0.08, BACK - 0.07], 'darkMetal'),
+    // BACK is the inner face, so the offset has to be +z to sit in the room —
+    // this used to be -0.07 and the whole strip was buried inside the wall.
+    box([w, 0.16, 0.1], [0, 0.08, BACK + 0.07], 'darkMetal'),
     box([0.1, 0.16, d], [LEFT + 0.07, 0.08, 0], 'darkMetal'),
     box([0.1, 0.16, d], [RIGHT - 0.07, 0.08, 0], 'darkMetal'),
   ]
@@ -427,6 +443,267 @@ function floorClutter(): Prop[] {
   return props
 }
 
+/**
+ * Exposed ceiling structure: cross joists and a spine beam.
+ *
+ * A flat ceiling plane is the single flattest thing in the room — it fills the
+ * top of every wide shot with one unbroken value and gives the eye nothing to
+ * judge height by. Joists put a repeating, receding rhythm up there, which is
+ * what actually communicates the ceiling's distance.
+ *
+ * The Z positions are chosen to fall in the gaps between the three rows of strip
+ * lights (which span z ±1.25 about -4.6, 1.4 and 6.2), so nothing intersects a
+ * fixture. Everything sits above y 3.8, well clear of the camera's 3.1 m ceiling.
+ */
+function ceilingStructure(): Prop[] {
+  const props: Prop[] = []
+  const w = ROOM_HALF_X * 2
+  const webY = ROOM_HEIGHT - 0.19
+  const flangeY = ROOM_HEIGHT - 0.36
+
+  for (const z of [-7.6, -1.6, 3.8, 8.6]) {
+    // Web and bottom flange: an inverted T, which is what reads as a joist from
+    // below without modelling a section.
+    props.push(box([w, 0.34, 0.14], [0, webY, z], 'structure'))
+    props.push(box([w, 0.06, 0.34], [0, flangeY, z], 'structure'))
+    // Bolted end plates where the joist lands on the wall.
+    props.push(box([0.26, 0.4, 0.24], [-ROOM_HALF_X + 0.2, webY - 0.03, z], 'galv'))
+    props.push(box([0.26, 0.4, 0.24], [ROOM_HALF_X - 0.2, webY - 0.03, z], 'galv'))
+  }
+
+  // Spine beam down the middle of the bay, between the two lamp rows.
+  props.push(box([0.24, 0.44, ROOM_HALF_Z * 2], [-0.9, ROOM_HEIGHT - 0.24, 0], 'structure'))
+  props.push(box([0.44, 0.06, ROOM_HALF_Z * 2], [-0.9, ROOM_HEIGHT - 0.45, 0], 'structure'))
+
+  return props
+}
+
+/**
+ * Wall trim: skirting-height wainscot, a cap rail, a cornice, corner posts and
+ * panel seams.
+ *
+ * All of it is there for one reason — an unbroken 4.2 m wall has no scale. Bands
+ * at 1.15 m and at the ceiling give the eye two known heights to measure the room
+ * against, and the vertical seams give it a repeating horizontal interval. That
+ * is most of what "well defined" means for a room: readable intervals, not more
+ * objects.
+ */
+function wallTrim(): Prop[] {
+  const props: Prop[] = []
+  const w = ROOM_HALF_X * 2
+  const d = ROOM_HALF_Z * 2
+  const railY = 1.15
+
+  // Wainscot: a proud band of darker board up to the rail, on the three walls the
+  // camera ever faces.
+  props.push(box([w, railY - 0.16, 0.05], [0, (railY + 0.16) / 2, BACK + 0.05], 'dado'))
+  props.push(box([0.05, railY - 0.16, d], [LEFT + 0.05, (railY + 0.16) / 2, 0], 'dado'))
+  props.push(box([0.05, railY - 0.16, d], [RIGHT - 0.05, (railY + 0.16) / 2, 0], 'dado'))
+
+  // Cap rail on top of it, and cornice where the wall meets the ceiling.
+  props.push(box([w, 0.06, 0.1], [0, railY, BACK + 0.07], 'wood'))
+  props.push(box([0.1, 0.06, d], [LEFT + 0.07, railY, 0], 'wood'))
+  props.push(box([0.1, 0.06, d], [RIGHT - 0.07, railY, 0], 'wood'))
+
+  const cornice = ROOM_HEIGHT - 0.09
+  props.push(box([w, 0.12, 0.09], [0, cornice, BACK + 0.06], 'ceiling'))
+  props.push(box([0.09, 0.12, d], [LEFT + 0.06, cornice, 0], 'ceiling'))
+  props.push(box([0.09, 0.12, d], [RIGHT - 0.06, cornice, 0], 'ceiling'))
+  props.push(box([w, 0.12, 0.09], [0, cornice, FRONT - 0.06], 'ceiling'))
+
+  // Corner posts, hiding the four vertical seams where the wall boxes meet.
+  for (const x of [LEFT + 0.06, RIGHT - 0.06]) {
+    for (const z of [BACK + 0.06, FRONT - 0.06]) {
+      props.push(box([0.14, ROOM_HEIGHT - 0.2, 0.14], [x, ROOM_HEIGHT / 2 - 0.1, z], 'wall', [0, Math.PI / 4, 0]))
+    }
+  }
+
+  // Panel joints above the rail. Left and right walls only — the back wall is
+  // taken up by the pegboard across most of its width.
+  //
+  // Modelled as proud pilasters in the wall's own colour rather than as dark
+  // inset lines. A dark line is a stripe painted on a flat surface and reads as
+  // exactly that; a strip standing 30 mm off the wall gets a lit face and a
+  // shaded one, and relief is what the eye accepts as a joint.
+  const seamTop = ROOM_HEIGHT - 0.16
+  const seamH = seamTop - railY
+  for (const z of [-8.2, -6.6, 0.9, 8.6]) {
+    props.push(box([0.06, seamH, 0.16], [LEFT + 0.06, railY + seamH / 2, z], 'wall'))
+  }
+  for (const z of [-7.5, -3.5, 3.0, 7.0]) {
+    props.push(box([0.06, seamH, 0.16], [RIGHT - 0.06, railY + seamH / 2, z], 'wall'))
+  }
+
+  return props
+}
+
+/**
+ * Electrical and air services: surface conduit, junction boxes, sockets, a
+ * distribution board and the air line feeding the compressor.
+ *
+ * A garage is a working building and its services are on the surface, not buried.
+ * Conduit is also the only thing in the room that draws a continuous line across
+ * two walls, which ties the separate prop clusters into one space instead of
+ * three arrangements against a backdrop.
+ */
+function wallServices(): Prop[] {
+  const props: Prop[] = []
+  const runY = 3.35
+
+  // Horizontal runs along the back and right walls, above everything mounted.
+  props.push(cyl([0.035, 0.035, ROOM_HALF_X * 2 - 0.3, 8], [0, runY, BACK + 0.09], 'galv', [0, 0, Math.PI / 2]))
+  props.push(cyl([0.035, 0.035, ROOM_HALF_Z * 2 - 0.3, 8], [RIGHT - 0.09, runY, 0], 'galv', [Math.PI / 2, 0, 0]))
+  // Saddle clips holding the run off the wall.
+  for (let i = 0; i < 9; i++) {
+    props.push(box([0.05, 0.09, 0.09], [-7.6 + i * 1.9, runY, BACK + 0.06], 'galv'))
+  }
+  for (let i = 0; i < 9; i++) {
+    props.push(box([0.09, 0.09, 0.05], [RIGHT - 0.06, runY, -8.4 + i * 2.1], 'galv'))
+  }
+
+  // Junction boxes.
+  for (const x of [-5.5, 0.6, 5.2]) {
+    props.push(box([0.17, 0.17, 0.09], [x, runY, BACK + 0.08], 'galv'))
+  }
+
+  // Distribution board on the right wall, with a drop from the run into its top.
+  const panelZ = -3.6
+  props.push(box([0.13, 0.66, 0.46], [RIGHT - 0.07, 1.95, panelZ], 'galv'))
+  props.push(box([0.03, 0.58, 0.38], [RIGHT - 0.14, 1.95, panelZ], 'darkMetal'))
+  props.push(box([0.05, 0.05, 0.12], [RIGHT - 0.15, 1.95, panelZ - 0.21], 'steel'))
+  props.push(cyl([0.03, 0.03, 1.05, 8], [RIGHT - 0.09, 2.83, panelZ], 'galv', [0, 0, 0]))
+
+  // Sockets, sat on the cap rail at 1.15 the way surface boxes usually are.
+  const sockets: Array<[number, number, number]> = [
+    [-3.2, BACK + 0.07, 0],
+    [1.4, BACK + 0.07, 0],
+    [RIGHT - 0.07, 2.2, Math.PI / 2],
+    [RIGHT - 0.07, 5.0, Math.PI / 2],
+  ]
+  for (const [x, z, rotY] of sockets) {
+    const position: Vec3 = [x, 1.28, z]
+    props.push(box([0.16, 0.13, 0.06], position, 'ceiling', [0, rotY, 0]))
+    // Stub of conduit dropping into the box from above.
+    props.push(cyl([0.022, 0.022, 0.16, 6], [x, 1.42, z], 'galv'))
+  }
+  // Switch bank beside the door.
+  props.push(box([0.2, 0.16, 0.05], [RIGHT - 0.07, 1.42, 7.6], 'ceiling', [0, Math.PI / 2, 0]))
+
+  // Air line from the compressor up to the run, then along the wall.
+  props.push(cyl([0.018, 0.018, 2.4, 6], [RIGHT - 0.14, 2.1, 4.3], 'rust'))
+  props.push(cyl([0.018, 0.018, 5.2, 6], [RIGHT - 0.14, 3.28, 1.8], 'rust', [Math.PI / 2, 0, 0]))
+  // Drop leg with a coupler, where a hose would be plugged in.
+  props.push(cyl([0.016, 0.016, 1.7, 6], [RIGHT - 0.14, 2.45, -0.8], 'rust'))
+  props.push(cyl([0.035, 0.035, 0.12, 8], [RIGHT - 0.14, 1.58, -0.8], 'steel'))
+
+  return props
+}
+
+/**
+ * Slab detail: expansion joints, a floor drain and safety hatching at the door.
+ *
+ * The joint grid is the highest-value item in this file per line of code. A
+ * poured slab is cut into panels roughly three metres square, and those cuts give
+ * the floor a perspective grid — the single strongest depth cue available in a
+ * shot where the floor is half the frame. Offset from the origin so the car does
+ * not sit astride a line.
+ */
+function slabDetail(): Prop[] {
+  const props: Prop[] = []
+  const y = 0.005
+  const w = ROOM_HALF_X * 2
+  const d = ROOM_HALF_Z * 2
+
+  for (const z of [-6.4, -3.2, 3.2, 6.4]) {
+    props.push(box([w, 0.012, 0.035], [0, y, z], 'seam'))
+  }
+  for (const x of [-5.4, -2.2, 2.2, 5.4]) {
+    props.push(box([0.035, 0.012, d], [x, y, 0], 'seam'))
+  }
+
+  // Floor drain: a recessed square with slotted bars across it.
+  const dx = 4.6
+  const dz = -6.2
+  props.push(box([0.5, 0.014, 0.5], [dx, y + 0.002, dz], 'seam'))
+  props.push(box([0.56, 0.02, 0.06], [dx, y + 0.004, dz - 0.25], 'galv'))
+  props.push(box([0.56, 0.02, 0.06], [dx, y + 0.004, dz + 0.25], 'galv'))
+  for (let i = 0; i < 6; i++) {
+    props.push(box([0.04, 0.016, 0.44], [dx - 0.2 + i * 0.08, y + 0.006, dz], 'galv'))
+  }
+
+  // Hatched threshold at the door, and a kerb the door seal closes onto.
+  props.push(box([5.4, 0.05, 0.16], [0, 0.025, FRONT - 0.34], 'seam'))
+  for (let i = 0; i < 11; i++) {
+    props.push(box([0.16, 0.014, 0.42], [-2.4 + i * 0.48, y, FRONT - 0.75], 'yellow', [0, 0.62, 0]))
+  }
+
+  // Two bollards protecting the bench corner from a badly parked car.
+  for (const z of [BACK + 1.9, BACK + 3.1]) {
+    props.push(cyl([0.075, 0.085, 0.72, 12], [LEFT + 2.5, 0.36, z], 'yellow'))
+    props.push(cyl([0.12, 0.12, 0.03, 12], [LEFT + 2.5, 0.015, z], 'darkMetal'))
+  }
+
+  return props
+}
+
+/**
+ * Door hardware: jambs, torsion gear, tracks, and the opener hanging off the
+ * ceiling.
+ *
+ * The sectional door already read as a door; what it lacked was the machinery
+ * that makes one work. Tracks running back into the room also carry the eye from
+ * the front wall to the ceiling, which is the join the original room never made.
+ */
+function doorHardware(): Prop[] {
+  const props: Prop[] = []
+  const z = FRONT - 0.1
+
+  // Jambs either side of the opening.
+  for (const x of [-2.72, 2.72]) {
+    props.push(box([0.22, 3.7, 0.26], [x, 1.85, z - 0.02], 'wood'))
+    props.push(box([0.06, 3.7, 0.06], [x + (x < 0 ? 0.13 : -0.13), 1.85, z - 0.16], 'darkMetal'))
+  }
+
+  // Torsion shaft above the opening, with cable drums and the spring.
+  const shaftY = 3.78
+  props.push(cyl([0.028, 0.028, 5.5, 8], [0, shaftY, z - 0.24], 'steel', [0, 0, Math.PI / 2]))
+  for (const x of [-2.5, 2.5]) {
+    props.push(cyl([0.1, 0.1, 0.16, 12], [x, shaftY, z - 0.24], 'darkMetal', [0, 0, Math.PI / 2]))
+  }
+  props.push(cyl([0.075, 0.075, 1.7, 12], [0, shaftY, z - 0.24], 'rust', [0, 0, Math.PI / 2]))
+  props.push(box([0.12, 0.26, 0.22], [0.9, shaftY, z - 0.24], 'galv'))
+  props.push(box([0.12, 0.26, 0.22], [-0.9, shaftY, z - 0.24], 'galv'))
+
+  // Horizontal tracks running back into the bay, on drop hangers.
+  for (const x of [-2.55, 2.55]) {
+    props.push(box([0.09, 0.11, 4.2], [x, 3.62, z - 2.3], 'darkMetal'))
+    for (const dz of [-1.1, -3.2]) {
+      props.push(box([0.04, 0.5, 0.04], [x, 3.86, z + dz], 'galv'))
+    }
+  }
+
+  // Opener: motor head, rail down the middle, and its own hangers.
+  props.push(box([0.36, 0.28, 0.94], [0, 3.55, z - 3.7], 'galv'))
+  props.push(box([0.3, 0.1, 0.24], [0, 3.36, z - 3.7], 'darkMetal'))
+  props.push(box([0.09, 0.13, 3.2], [0, 3.66, z - 1.7], 'galv'))
+  props.push(box([0.04, 0.46, 0.04], [-0.2, 3.9, z - 3.9], 'galv'))
+  props.push(box([0.04, 0.46, 0.04], [0.2, 3.9, z - 3.9], 'galv'))
+
+  // Weather seal along the bottom panel, and a lift handle.
+  props.push(box([5.0, 0.06, 0.11], [0, 0.055, z], 'rubber'))
+  props.push(box([0.34, 0.06, 0.05], [0, 0.72, z - 0.07], 'steel'))
+  // Vision lights in the top panel, so the door is not a blank slab. Both sit
+  // proud of the panel face on the room side (-z), frame behind, glazing in
+  // front of it — the panel is opaque, so anything at the panel's own depth is
+  // simply not there.
+  for (let i = 0; i < 4; i++) {
+    props.push(box([0.7, 0.38, 0.02], [-1.65 + i * 1.1, 2.95, z - 0.05], 'darkMetal'))
+    props.push(box([0.62, 0.3, 0.02], [-1.65 + i * 1.1, 2.95, z - 0.07], 'glass'))
+  }
+
+  return props
+}
+
 /** Everything static in the room, built once at module scope. */
 export const GARAGE_PROPS: Prop[] = [
   ...shell(),
@@ -435,8 +712,13 @@ export const GARAGE_PROPS: Prop[] = [
   ...shelving(),
   ...rightBay(),
   ...garageDoor(),
+  ...doorHardware(),
   ...ceilingLights(),
+  ...ceilingStructure(),
+  ...wallTrim(),
+  ...wallServices(),
   ...floorMarkings(),
+  ...slabDetail(),
   ...leftWallDetail(),
   ...floorClutter(),
 ]

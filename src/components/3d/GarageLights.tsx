@@ -39,6 +39,7 @@ const BASE = {
   spot: 150,
   bounce: 0.42,
   doorFill: 0.5,
+  ceilingBounce: 0.38,
   strip: 22,
 }
 
@@ -68,6 +69,7 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
   const spot = useRef<SpotLight>(null)
   const bounce = useRef<DirectionalLight>(null)
   const doorFill = useRef<DirectionalLight>(null)
+  const ceilingBounce = useRef<DirectionalLight>(null)
   const stripL = useRef<RectAreaLight>(null)
   const stripR = useRef<RectAreaLight>(null)
   const beamL = useRef<SpotLight>(null)
@@ -96,6 +98,7 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     if (spot.current) spot.current.intensity = BASE.spot * fixture
     if (bounce.current) bounce.current.intensity = BASE.bounce * fixture
     if (doorFill.current) doorFill.current.intensity = BASE.doorFill * fixture
+    if (ceilingBounce.current) ceilingBounce.current.intensity = BASE.ceilingBounce * fixture
     if (stripL.current) stripL.current.intensity = BASE.strip * fixture
     if (stripR.current) stripR.current.intensity = BASE.strip * fixture
 
@@ -150,6 +153,19 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
           spotlight cone reaches it, so without this it renders ambient-only
           and every prop on it reads as a dark smudge. */}
       <directionalLight ref={doorFill} position={[2, 4, 9]} intensity={BASE.doorFill} color="#e8e2d0" />
+      {/* Light travelling upward, standing in for the floor bounce.
+          Everything facing down — the ceiling deck, the underside of every joist,
+          the shelf soffits, the flange of the door track — is lit by nothing
+          otherwise: the hemisphere gives downward normals the dark floor colour,
+          the area lights point away, and the spotlight is above the roof. The
+          result was a black band across the top of every wide shot, which is
+          also where all the new structure lives. */}
+      <directionalLight
+        ref={ceilingBounce}
+        position={[0, -3, 0]}
+        intensity={BASE.ceilingBounce}
+        color="#d8d0c0"
+      />
       {/* The two ceiling fluorescents nearest the car, as actual area lights
           rather than emissive props. A point or spot light can only ever put a
           round hotspot on a panel; a strip puts a long streak down the flank,

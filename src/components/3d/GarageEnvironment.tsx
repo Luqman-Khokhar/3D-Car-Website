@@ -110,6 +110,15 @@ export function GarageEnvironment({ children }: { children: ReactNode }) {
     add(new BoxGeometry(0.95, 1.1, 1.5), basic('#8e2b26'), [ROOM_HALF_X - 0.6, 0.6, -1.4])
     add(new BoxGeometry(3.4, 0.1, 0.9), basic('#c08f5c'), [-2.4, 0.92, -ROOM_HALF_Z + 0.8])
 
+    // Ceiling joists, matching ceilingStructure() in src/scenes/garage.ts. Dark
+    // bands between the bright strips: without them the whole upper hemisphere
+    // reflects as one even glow, and a roof that reflects evenly is the reason
+    // cheap renders look like they were shot in a lightbox.
+    for (const z of [-7.6, -1.6, 3.8, 8.6]) {
+      add(new BoxGeometry(ROOM_HALF_X * 2, 0.34, 0.14), basic('#2b2f34'), [0, ROOM_HEIGHT - 0.19, z])
+    }
+    add(new BoxGeometry(0.24, 0.44, ROOM_HALF_Z * 2), basic('#2b2f34'), [-0.9, ROOM_HEIGHT - 0.24, 0])
+
     // Ceiling strips.
     const lampMaterial = basic(radiance(LAMP_RADIANCE))
     for (const x of LAMP_X) {

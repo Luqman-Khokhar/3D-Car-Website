@@ -9,18 +9,49 @@ import {
   MeshLambertMaterial,
   MeshStandardMaterial,
   Quaternion,
+  Vector2,
   Vector3,
 } from 'three'
 import type { BufferGeometry, Group, Material, Texture } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { CLOCK_FACE_CENTER, GARAGE_PROPS } from '@/scenes/garage'
 import type { GarageMaterialKey, Prop } from '@/scenes/garage'
 import { GARAGE_WALL } from '@/scenes/palette'
+import { createWallSurfaceMaps } from '@/lib/surfaceTextures'
 import { lightingState } from '@/animations/lightingState'
 import { useEnvironmentMap } from './environmentContext'
 
+/**
+ * Largest chamfer any prop gets, in metres. Roughly a 10 mm break — the arris you
+ * get on a rolled steel section or a painted timber edge.
+ */
+const EDGE_RADIUS = 0.012
+/** Below this thickness a prop is a plate or a painted line; chamfering it costs
+ *  13x the vertices to round an edge nobody can resolve. */
+const MIN_CHAMFER_DIM = 0.05
+
+/**
+ * Builds a prop's geometry, breaking box edges where the prop is thick enough to
+ * have a real one.
+ *
+ * This is the largest single realism change in the room. A perfectly sharp
+ * 90-degree edge does not exist on any manufactured object, and more to the point
+ * it cannot catch light: the shading jumps from one face's value straight to the
+ * next, so every box in the scene reads as a flat-shaded primitive. A chamfer a
+ * centimetre wide puts a bright sliver along every edge in the room, and that
+ * sliver is what makes the shapes look built rather than generated.
+ *
+ * `segments: 1` gives three quads per face axis — one flat centre and two rounded
+ * shoulders. That is the cheapest form that still produces the highlight.
+ */
 function buildGeometry(prop: Prop): BufferGeometry {
-  if (prop.kind === 'box') return new BoxGeometry(...prop.args)
+  if (prop.kind === 'box') {
+    const [w, h, d] = prop.args
+    const smallest = Math.min(w, h, d)
+    if (smallest < MIN_CHAMFER_DIM) return new BoxGeometry(w, h, d)
+    return new RoundedBoxGeometry(w, h, d, 1, Math.min(EDGE_RADIUS, smallest * 0.22))
+  }
   if (prop.kind === 'cylinder') {
     const [rTop, rBottom, height, radial] = prop.args
     return new CylinderGeometry(rTop, rBottom, height, radial)
@@ -40,7 +71,13 @@ function bake(geometry: BufferGeometry, prop: Prop) {
     new Vector3(1, 1, 1),
   )
   geometry.applyMatrix4(matrix)
-  return geometry
+  // mergeGeometries refuses a mix of indexed and non-indexed inputs, and
+  // RoundedBoxGeometry is non-indexed while every other primitive here is
+  // indexed. Flattening everything is the only way the two can share a group.
+  if (geometry.index === null) return geometry
+  const flat = geometry.toNonIndexed()
+  geometry.dispose()
+  return flat
 }
 
 interface MaterialSpec {
@@ -56,6 +93,12 @@ interface MaterialSpec {
    * on screen so the per-fragment cost barely registers.
    */
   matte?: boolean
+  /**
+   * Take albedo and normal from a generated plaster surface tinted to `color`,
+   * rather than rendering flat colour. Only worth it on the shell: those are the
+   * surfaces big enough on screen for flatness to be obvious.
+   */
+  plaster?: boolean
 }
 
 /** Baseline emissive on the ceiling strips, and baseline IBL on every prop that
@@ -68,8 +111,8 @@ const MATERIAL_SPECS: Record<GarageMaterialKey, MaterialSpec> = {
   // Matte colours run lighter than they would under IBL: Lambert gets no
   // environment contribution, so values tuned against a Standard material come
   // out muddy. These are pre-compensated.
-  wall: { color: GARAGE_WALL, matte: true },
-  ceiling: { color: '#cdc8bf', matte: true },
+  wall: { color: GARAGE_WALL, matte: true, plaster: true },
+  ceiling: { color: '#cdc8bf', matte: true, plaster: true },
   // Warm hardboard, so the steel tools read against it.
   pegboard: { color: '#b58f64', matte: true },
   wood: { color: '#c08f5c', matte: true },
@@ -82,19 +125,57 @@ const MATERIAL_SPECS: Record<GarageMaterialKey, MaterialSpec> = {
   redPaint: { color: '#a8322c', roughness: 0.42, metalness: 0.28 },
   rubber: { color: '#1a1c1f', roughness: 0.9, metalness: 0.03 },
   drum: { color: '#3d5f7a', roughness: 0.46, metalness: 0.42 },
-  glass: { color: '#b7cddb', roughness: 0.1, metalness: 0.1 },
+  // Glazing, in the high window and the door's vision panels. Carries its own
+  // emissive because there is no world outside the shell to see through it: with
+  // reflection alone the panes render darker than the wall around them, which
+  // reads as a hole rather than as daylight.
+  glass: { color: '#b7cddb', emissive: '#9fc4dd', emissiveIntensity: 0.5, roughness: 0.1, metalness: 0.1 },
+  // Bright, slightly rough zinc. Deliberately lighter and less polished than
+  // `steel`, so conduit and door gear separate from hand tools instead of
+  // merging into one grey metal.
+  galv: { color: '#b3bac0', roughness: 0.46, metalness: 0.72 },
+  // Oxidised steel: still metallic enough to catch the strip lights, matt and
+  // brown enough to read as old next to the galvanised runs beside it.
+  rust: { color: '#6d4636', roughness: 0.84, metalness: 0.34 },
+  yellow: { color: '#c19a24', roughness: 0.66, metalness: 0.08 },
+  // Painted dado. Mid tone rather than near-black: a dark band at floor level
+  // plus a dark ceiling and a slate floor squeezes the room into a letterbox of
+  // wall, and the whole shot loses its middle values.
+  dado: { color: '#565f66', matte: true },
+  // Painted structural steel, and deliberately Standard rather than matte so it
+  // picks up the strip lights. Joists in bare dark metal render as black bars:
+  // nothing below them lights their undersides.
+  structure: { color: '#6a7076', roughness: 0.66, metalness: 0.32 },
+  // Slab joints and drain recesses. Matte and dark, because these stand in for
+  // gaps: anything with a specular response reads as a painted stripe. Neutral
+  // rather than blue — the shell's hemisphere fill tints matte surfaces toward
+  // the sky colour, and a cool seam came out navy.
+  seam: { color: '#2c2e30', matte: true },
   lamp: { color: '#f2efe4', emissive: '#fff6e2', emissiveIntensity: LAMP_EMISSIVE, matte: true },
 }
 
-function createMaterial(spec: MaterialSpec, envMap: Texture | null): Material {
-  const { matte, ...params } = spec
-  return matte
-    ? new MeshLambertMaterial({
-        color: params.color,
-        emissive: params.emissive,
-        emissiveIntensity: params.emissiveIntensity,
-      })
-    : new MeshStandardMaterial({ ...params, envMap, envMapIntensity: PROP_ENV_INTENSITY })
+/** Albedo + normal for the shell, tinted at generation time — so the material's
+ *  own colour stays white and does not tint the map a second time. */
+type PlasterMaps = ReturnType<typeof createWallSurfaceMaps>
+
+function createMaterial(spec: MaterialSpec, envMap: Texture | null, plaster?: PlasterMaps): Material {
+  const { matte, plaster: _plaster, ...params } = spec
+  if (matte) {
+    const material = new MeshLambertMaterial({
+      color: plaster ? '#ffffff' : params.color,
+      emissive: params.emissive,
+      emissiveIntensity: params.emissiveIntensity,
+    })
+    if (plaster) {
+      material.map = plaster.map
+      material.normalMap = plaster.normalMap
+      // Barely there. Painted blockwork is a texture you read as a change in
+      // value, not as relief; a strong normal turns the walls into stucco.
+      material.normalScale = new Vector2(0.3, 0.3)
+    }
+    return material
+  }
+  return new MeshStandardMaterial({ ...params, envMap, envMapIntensity: PROP_ENV_INTENSITY })
 }
 
 /**
@@ -201,6 +282,26 @@ const WallClock = memo(function WallClock() {
 export const Garage = memo(function Garage() {
   const envMap = useEnvironmentMap()
 
+  // One set of maps per distinct shell colour, generated once. Both keys that use
+  // them cover thousands of pixels, and both would otherwise render as a single
+  // flat value across a 17 m surface.
+  const plaster = useMemo(() => {
+    const cache = new Map<string, PlasterMaps>()
+    for (const spec of Object.values(MATERIAL_SPECS)) {
+      if (spec.plaster && !cache.has(spec.color)) cache.set(spec.color, createWallSurfaceMaps(spec.color))
+    }
+    return cache
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      for (const maps of plaster.values()) {
+        maps.map.dispose()
+        maps.normalMap.dispose()
+      }
+    }
+  }, [plaster])
+
   const groups = useMemo(() => {
     const byMaterial = new Map<GarageMaterialKey, BufferGeometry[]>()
 
@@ -215,11 +316,12 @@ export const Garage = memo(function Garage() {
       const merged = mergeGeometries(geometries)
       // mergeGeometries copies vertex data out, so the sources are now dead weight.
       for (const geometry of geometries) geometry.dispose()
-      const material = createMaterial(MATERIAL_SPECS[key], envMap)
+      const spec = MATERIAL_SPECS[key]
+      const material = createMaterial(spec, envMap, spec.plaster ? plaster.get(spec.color) : undefined)
 
       return { key, geometry: merged, material }
     })
-  }, [envMap])
+  }, [envMap, plaster])
 
   useEffect(() => {
     return () => {
@@ -246,9 +348,12 @@ export const Garage = memo(function Garage() {
         emissiveIntensity?: number
         envMapIntensity?: number
       }
-      if (group.key === 'lamp') {
-        material.emissiveIntensity = LAMP_EMISSIVE * (1 - 0.94 * dim)
-      } else if (material.envMapIntensity !== undefined) {
+      // Any emissive in the room is a light fitting or a window, and both go out
+      // with the rest of the building. Read off the spec rather than special
+      // casing the lamps, so glazing added later dims without touching this.
+      const emissive = MATERIAL_SPECS[group.key].emissiveIntensity
+      if (emissive !== undefined) material.emissiveIntensity = emissive * (1 - 0.94 * dim)
+      if (material.envMapIntensity !== undefined) {
         material.envMapIntensity = PROP_ENV_INTENSITY * (1 - 0.92 * dim)
       }
     }
