@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import Lenis from 'lenis'
 import { gsap, ScrollTrigger } from '@/lib/gsap'
-import { useSceneStore } from '@/store/useSceneStore'
+import { scrollSpeedMultiplier, useSceneStore } from '@/store/useSceneStore'
 
 let lenisInstance: Lenis | null = null
 
@@ -66,8 +66,19 @@ export function useSmoothScroll() {
       smoothWheel: true,
       // Touch smoothing fights native momentum on iOS; leave it to the OS.
       syncTouch: false,
+      wheelMultiplier: scrollSpeedMultiplier(useSceneStore.getState().scrollSpeed),
     })
     lenisInstance = lenis
+
+    // Live pacing changes. Mutating options is cheaper than tearing Lenis down
+    // and rebuilding it, which would drop the current scroll position and force
+    // a ScrollTrigger refresh mid-story.
+    let lastSpeed = useSceneStore.getState().scrollSpeed
+    const unsubscribeSpeed = useSceneStore.subscribe((state) => {
+      if (state.scrollSpeed === lastSpeed) return
+      lastSpeed = state.scrollSpeed
+      lenis.options.wheelMultiplier = scrollSpeedMultiplier(lastSpeed)
+    })
 
     // ScrollTrigger must recompute on every Lenis frame, not on native scroll events
     // (Lenis uses transforms/scrollTo, so native scroll fires at the wrong time).
@@ -81,6 +92,7 @@ export function useSmoothScroll() {
     lenis.on('scroll', onScroll)
 
     return () => {
+      unsubscribeSpeed()
       lenis.off('scroll', ScrollTrigger.update)
       lenis.off('scroll', onScroll)
       gsap.ticker.remove(raf)
