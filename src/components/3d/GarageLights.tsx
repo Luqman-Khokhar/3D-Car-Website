@@ -21,15 +21,15 @@ const FILL_FLOOR = 0.05
 /** Peak candela of one headlight beam at `frontGlow === 1`. */
 const BEAM_INTENSITY = 78
 /**
- * Peak intensity of the red wash one half of the tail bar throws behind the car.
+ * Peak intensity of the red wash one half of the tail lamp throws behind the car.
  *
- * Very low, and it has been cut twice. The bar itself is emissive and blooms, so
- * it already lights its own surroundings visually; this only has to put a hint of
- * red on the bumper and the floor. Every value tried above this washed the whole
- * tail — deck lid, quarters, roof — in flat red, which turns the shot into a
- * colour filter over a car instead of a car with its lights on.
+ * Very low. The lens is a large emissive panel and carries the shot on its own;
+ * this only has to put a hint of red on the bumper and the floor. Every value
+ * tried above this washed the whole tail — deck lid, quarters, roof — in flat
+ * red, which turns the shot into a colour filter over a car rather than a car
+ * with its lights on.
  */
-const TAIL_WASH_INTENSITY = 0.45
+const TAIL_WASH_INTENSITY = 0.22
 
 /** Baseline intensities, so the dim driver has something to scale against
  *  without re-reading JSX defaults. Must stay in step with the elements below. */
@@ -215,17 +215,20 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
         decay={1.5}
         color="#fff0d2"
       />
-      {/* Tail bar. Point lights rather than spots: the bar's job here is to stain
-          the bumper, the diffuser and the floor immediately behind the car red,
+      {/* Tail lamp spill. Point lights rather than spots: the lamp's job here is to
+          stain the bumper, the plate and the floor immediately behind the car red,
           not to throw a beam. Short `distance` keeps that wash local so it never
           tints the back wall — at anything longer the inverse-square falloff still
           reaches the roof and the whole car turns pink.
 
-          One per half of the bar, sitting behind the centre of each half rather
-          than at the old lens positions, so the spill spreads along the full width
-          of the lamp instead of pooling under two points on it. */}
-      <pointLight ref={tailL} position={[-0.45, 0.78, -2.0]} intensity={0} distance={2.4} decay={2} color="#ff2a18" />
-      <pointLight ref={tailR} position={[0.45, 0.78, -2.0]} intensity={0} distance={2.4} decay={2} color="#ff2a18" />
+          Kept well clear of the lens — below it and outboard of the bumper face.
+          A lamp must not light its own lens, and with decay 2 a light sitting
+          100 mm off the panel puts an irradiance of ~45 on it: the lens then reads
+          as a lit surface rather than a glowing one, and no change to its emissive
+          moves it at all, because the emissive stopped being what you were looking
+          at. That bug cost an afternoon; the distance is the fix. */}
+      <pointLight ref={tailL} position={[-0.55, 0.7, -2.6]} intensity={0} distance={3.2} decay={2} color="#ff2a18" />
+      <pointLight ref={tailR} position={[0.55, 0.7, -2.6]} intensity={0} distance={3.2} decay={2} color="#ff2a18" />
     </>
   )
 }

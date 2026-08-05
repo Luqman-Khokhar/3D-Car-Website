@@ -159,16 +159,16 @@ export function useCarMaterials(): CarMaterials {
         metalness: 0.3,
         roughness: 0.16,
       }),
-      // Driven much harder than the headlights by useLampPass, so the emissive is
-      // near-primary rather than the softer '#e02318' it used to be. A partly
-      // desaturated red desaturates further as it climbs — by the time it is
-      // bright enough to bloom it has gone pink, then white, and a white tail lamp
-      // is not a tail lamp. Keeping green and blue almost at zero means the extra
-      // radiance can only ever make it a brighter red.
+      // Near-primary rather than the softer '#e02318' it used to be, and run far
+      // dimmer than the headlights. A partly desaturated red desaturates further as
+      // it climbs, and AgX pushes it the rest of the way: past about 1.0 the tail
+      // panel goes pink, then salmon, and a salmon tail lamp is not a tail lamp.
+      // Keeping green and blue near zero buys back some of that headroom.
+      // useLampPass owns the scene-by-scene level; see the table there.
       lampRed: new MeshStandardMaterial({
         color: '#5e1114',
         emissive: '#ff1405',
-        emissiveIntensity: 1.9,
+        emissiveIntensity: 0.45,
         metalness: 0,
         roughness: 0.28,
       }),

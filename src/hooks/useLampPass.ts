@@ -13,14 +13,27 @@ const ENV_DIM = 0.95
 
 /** Always-on emissive levels, from useCarMaterials. */
 const LAMP_WHITE_BASE = 2.4
-const LAMP_RED_BASE = 1.9
-/** Multiplier added on top at full glow. Chosen so the lamps clear the bloom
+const LAMP_RED_BASE = 0.45
+/** Multiplier added on top at full glow. Chosen so the headlights clear the bloom
  *  threshold (0.9 in PostFX) by a wide margin rather than by a hair. */
 const LAMP_WHITE_GAIN = 3.6
-// Lower than the white side on purpose. Red's luminance coefficient is a fifth of
-// green's, so a red emissive has to run much hotter than a white one to cross the
-// same bloom threshold — and pushed that far it stops looking red.
-const LAMP_RED_GAIN = 1.15
+/**
+ * The red side runs an order of magnitude lower, and deliberately below the bloom
+ * threshold: it is a broad lit panel, not a point source, so it does not need a
+ * halo to read as switched on.
+ *
+ * The ceiling is set by AgX, not by taste. AgX mixes channels before its curve, so
+ * a pure red climbs in green and blue as it brightens and slides toward white.
+ * Measured off the rendered frame, the lit panel comes out:
+ *
+ *   emissive 0.70 -> rgb(203, 75, 57)   red
+ *   emissive 0.96 -> rgb(217, 90, 71)   red-orange
+ *   emissive 4.65 -> rgb(255, 175, 153) salmon
+ *
+ * Base times (1 + gain) lands on 0.70. Fourteen points of brightness is a cheap
+ * price for the difference between a tail lamp and a sunburn.
+ */
+const LAMP_RED_GAIN = 0.55
 
 interface Emissive {
   emissiveIntensity: number

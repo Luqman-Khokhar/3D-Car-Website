@@ -56,8 +56,8 @@ export const SECTION_COPY: SectionCopy[] = [
   {
     id: 'tail-lamps',
     label: '05 / Rear Lighting',
-    title: 'One Red Line',
-    body: 'A single unbroken line drops into the tail trough and the bay goes black around it. One curve, corner to corner, falling away at both ends. From behind, in the dark, this is the entire car.',
+    title: 'One Red Band',
+    body: 'The whole tail panel lights at once and the bay goes black around it. Two dividers near the corners cut a square off each end for the indicators — the same lens, the same plane, just broken. From behind, in the dark, this is the entire car.',
   },
   {
     id: 'head-lamps',
