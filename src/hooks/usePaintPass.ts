@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { Color } from 'three'
 import type { MeshPhysicalMaterial } from 'three'
 import { paintState } from '@/animations/paintState'
-import { PRIMER, BODY } from '@/scenes/palette'
+import { PRIMER } from '@/scenes/palette'
 
 /**
  * Never let clearcoat reach exactly 0. three keys the USE_CLEARCOAT shader define
@@ -33,7 +33,6 @@ export const PAINTED_SURFACE = {
 }
 
 const PRIMER_COLOR = new Color(PRIMER)
-const BODY_COLOR = new Color(BODY)
 
 function lerp(from: number, to: number, t: number) {
   return from + (to - from) * t
@@ -43,9 +42,12 @@ function lerp(from: number, to: number, t: number) {
  * Pure application of a 0..1 paint progress onto a material. Split out of the
  * hook so it can run without a renderer — and so a real-GLB path can paint its
  * own body material with the same curve.
+ *
+ * Lerps toward paintState.targetColor rather than a fixed constant so a swatch
+ * pick repaints without touching the timeline.
  */
 export function applyPaint(material: MeshPhysicalMaterial, t: number) {
-  material.color.lerpColors(PRIMER_COLOR, BODY_COLOR, t)
+  material.color.lerpColors(PRIMER_COLOR, paintState.targetColor, t)
   material.metalness = lerp(PRIMER_SURFACE.metalness, PAINTED_SURFACE.metalness, t)
   material.roughness = lerp(PRIMER_SURFACE.roughness, PAINTED_SURFACE.roughness, t)
   material.clearcoat = lerp(PRIMER_SURFACE.clearcoat, PAINTED_SURFACE.clearcoat, t)
@@ -60,16 +62,23 @@ export function applyPaint(material: MeshPhysicalMaterial, t: number) {
  * Drives the `bodyPaint` material off the scrubbed timeline.
  *
  * The material is shared by every painted panel, so one lerp per frame repaints
- * the whole car. Skipped entirely when progress has not moved, which is every
- * frame outside the paint scene.
+ * the whole car. Skipped when neither progress nor the target colour has moved,
+ * which is every frame outside the paint scene with the default swatch.
+ *
+ * colorGeneration is tracked separately from progress: after the scrub has
+ * settled at t=1 (or is pinned there by reduced motion), picking a new swatch
+ * does not change progress at all, so progress alone would never re-fire.
  */
 export function usePaintPass(material: MeshPhysicalMaterial) {
   const applied = useRef(-1)
+  const appliedGeneration = useRef(-1)
 
   useFrame(() => {
     const t = paintState.progress
-    if (t === applied.current) return
+    const generation = paintState.colorGeneration
+    if (t === applied.current && generation === appliedGeneration.current) return
     applied.current = t
+    appliedGeneration.current = generation
     applyPaint(material, t)
   })
 }

@@ -29,3 +29,18 @@ export const FOG_FAR = 44
  */
 export const PRIMER = '#6b6f75'
 export const BODY = '#8d2b32'
+
+/**
+ * Picker options for the paint scene. Curated rather than a free hex input:
+ * PAINTED_SURFACE's metalness/roughness/clearcoat curve in usePaintPass.ts was
+ * tuned against BODY specifically, and an arbitrary colour under that same
+ * clearcoat can read flat or blown out. `rosso` is BODY itself, kept first so
+ * the default selection matches the untouched scene.
+ */
+export const BODY_SWATCHES = [
+  { name: 'Rosso', hex: BODY },
+  { name: 'Nero', hex: '#1c1e22' },
+  { name: 'Bianco', hex: '#e8e6df' },
+  { name: 'Blu', hex: '#1f3a5f' },
+  { name: 'Giallo', hex: '#c9962b' },
+] as const

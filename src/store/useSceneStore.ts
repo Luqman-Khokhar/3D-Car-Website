@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { setPaintTarget } from '@/animations/paintState'
+import { BODY } from '@/scenes/palette'
 
 /** Ordered narrative sections. Index is the scroll order. */
 export const SECTIONS = [
@@ -32,6 +34,10 @@ interface SceneState {
    * scroll is locked and the user orbits/pans the garage with the cursor.
    */
   freeLook: boolean
+  /** Hex of the swatch the user has picked in the paint scene. Mirrors
+   *  paintState.targetColor for the UI's sake — the render loop reads the
+   *  three.Color directly and never subscribes to this. */
+  selectedBodyColor: string
 
   setActiveSection: (id: SectionId) => void
   setScrollProgress: (p: number) => void
@@ -41,6 +47,7 @@ interface SceneState {
   setPrefersReducedMotion: (reduced: boolean) => void
   setFreeLook: (on: boolean) => void
   toggleFreeLook: () => void
+  setBodyColor: (hex: string) => void
 }
 
 export const useSceneStore = create<SceneState>((set) => ({
@@ -51,6 +58,7 @@ export const useSceneStore = create<SceneState>((set) => ({
   lowPower: false,
   prefersReducedMotion: false,
   freeLook: false,
+  selectedBodyColor: BODY,
 
   setActiveSection: (activeSection) => set({ activeSection }),
   setScrollProgress: (scrollProgress) => set({ scrollProgress }),
@@ -60,4 +68,8 @@ export const useSceneStore = create<SceneState>((set) => ({
   setPrefersReducedMotion: (prefersReducedMotion) => set({ prefersReducedMotion }),
   setFreeLook: (freeLook) => set({ freeLook }),
   toggleFreeLook: () => set((s) => ({ freeLook: !s.freeLook })),
+  setBodyColor: (hex) => {
+    setPaintTarget(hex)
+    set({ selectedBodyColor: hex })
+  },
 }))
