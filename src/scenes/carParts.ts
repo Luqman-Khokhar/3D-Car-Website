@@ -13,7 +13,7 @@ interface PrimitiveBase {
   /**
    * Overrides the parent part's material for this primitive only. Lets a rim sit
    * inside the wheel and a lamp inside a body panel without inventing new part
-   * ids — the GLB contract stays at 16 names.
+   * ids — the GLB contract stays at 18 names.
    */
   material?: MaterialKey
 }
@@ -918,30 +918,14 @@ export const CAR_PARTS: CarPart[] = [
       { kind: 'box', args: [0.1, 0.28, 0.66], position: [0.91, 0.8, -1.32] },
       // Rear closing panel.
       { kind: 'box', args: [1.84, 0.4, 0.08], position: [0, 0.74, -1.86] },
-      // --- Tail lamps. A flat emissive rectangle reads as a sticker no matter how
-      // it is tuned, so each side is a dark housing with lit rings set into it —
-      // the housing gives the lens somewhere to sit and something to shade against.
-      ...[-1, 1].flatMap((side): Primitive[] => [
-        { kind: 'box', args: [0.46, 0.16, 0.06], position: [side * 0.6, 0.79, -1.895], material: 'shadow' },
-        // Torus normals already face +Z, so no rotation is needed to aim these
-        // out of the back of the car.
-        {
-          kind: 'torus',
-          args: [0.052, 0.017, 8, 20],
-          position: [side * 0.52, 0.795, -1.925],
-          material: 'lampRed',
-        },
-        {
-          kind: 'torus',
-          args: [0.052, 0.017, 8, 20],
-          position: [side * 0.68, 0.795, -1.925],
-          material: 'lampRed',
-        },
-        // Reverse lamp. Kept small and moved down beside the plate: sitting
-        // directly under the pair of red rings it read as a mouth under two eyes,
-        // which is all anyone could see afterwards.
-        { kind: 'box', args: [0.12, 0.03, 0.03], position: [side * 0.42, 0.68, -1.925], material: 'lampWhite' },
-      ]),
+      // --- Tail lamp housings. A flat emissive rectangle reads as a sticker no
+      // matter how it is tuned, so each side is a dark housing with lit rings set
+      // into it — the housing gives the lens somewhere to sit and something to
+      // shade against. Only the housings belong to the shell: the lit elements are
+      // their own part so the tail-lamps scene can fit them, see `lamps_rear`.
+      ...[-1, 1].map((side): Primitive => (
+        { kind: 'box', args: [0.46, 0.16, 0.06], position: [side * 0.6, 0.79, -1.895], material: 'shadow' }
+      )),
       // Rear plate, recessed below the lamps. Both this and the reverse lamps sit
       // above y 0.61, which is where the bumper skin now tops out — below that
       // line the bumper hides them and all that escapes is a glow along its edge.
@@ -950,27 +934,12 @@ export const CAR_PARTS: CarPart[] = [
       // Front fascia, closing the nose between the wings. Sits below the hood
       // plane (0.825) and above the bumper (0.58) so it butts against neither.
       { kind: 'box', args: [1.74, 0.22, 0.08], position: [0, 0.7, 1.99] },
-      // --- Headlights, same treatment: recessed housing, twin projector bowls,
-      // and a slim daytime strip under them. The strip is what the eye locks onto
-      // as a face, and it costs one box per side.
-      ...[-1, 1].flatMap((side): Primitive[] => [
-        { kind: 'box', args: [0.44, 0.18, 0.06], position: [side * 0.58, 0.725, 2.005], material: 'shadow' },
-        {
-          kind: 'cylinder',
-          args: [0.05, 0.05, 0.035, 18],
-          position: [side * 0.5, 0.75, 2.032],
-          rotation: [Math.PI / 2, 0, 0],
-          material: 'lampWhite',
-        },
-        {
-          kind: 'cylinder',
-          args: [0.05, 0.05, 0.035, 18],
-          position: [side * 0.665, 0.75, 2.032],
-          rotation: [Math.PI / 2, 0, 0],
-          material: 'lampWhite',
-        },
-        { kind: 'box', args: [0.38, 0.028, 0.03], position: [side * 0.58, 0.667, 2.032], material: 'lampWhite' },
-      ]),
+      // --- Headlight housings, same treatment as the tail. The bowls and the
+      // daytime strip that sit in these arrive in the head-lamps scene; see
+      // `lamps_front`.
+      ...[-1, 1].map((side): Primitive => (
+        { kind: 'box', args: [0.44, 0.18, 0.06], position: [side * 0.58, 0.725, 2.005], material: 'shadow' }
+      )),
       // B-pillar infill between door shut line and rear quarter.
       { kind: 'box', args: [0.1, 0.33, 0.31], position: [-0.9, 0.735, -0.695] },
       { kind: 'box', args: [0.1, 0.33, 0.31], position: [0.9, 0.735, -0.695] },
@@ -1217,6 +1186,78 @@ export const CAR_PARTS: CarPart[] = [
           rotation: [Math.PI / 2, 0, 0],
           material: 'shadow',
         },
+      ]),
+    ],
+  },
+  {
+    id: 'lamps_rear',
+    stage: 'tail-lamps',
+    material: 'lampRed',
+    // Origin at the centre of the rear cluster rather than at the car's, so the
+    // exploded rotation below tips the lamps into their housings instead of
+    // swinging them through an arc two metres wide.
+    position: [0, 0.76, -1.9],
+    // Lowered in from above and behind. The obvious offset — straight back along
+    // -Z — drags the lenses through the rear bumper, which is already installed
+    // by this scene. Everything above y 0.61 is clear of it, so the approach
+    // comes down rather than in.
+    //
+    // Kept short on purpose. A part is made visible at the *start* of its scene,
+    // which is the moment the previous scene is fully framed, so a long exploded
+    // offset leaves the piece hanging in that shot — and two lit lamps floating
+    // over the deck lid during the body-panels scene is not a subtle mistake.
+    explodedOffset: [0, 0.34, -0.26],
+    explodedRotation: [-0.5, 0, 0],
+    primitives: [
+      ...[-1, 1].flatMap((side): Primitive[] => [
+        // Torus normals already face +Z, so no rotation is needed to aim these
+        // out of the back of the car.
+        {
+          kind: 'torus',
+          args: [0.052, 0.017, 8, 20],
+          position: [side * 0.52, 0.035, -0.025],
+          material: 'lampRed',
+        },
+        {
+          kind: 'torus',
+          args: [0.052, 0.017, 8, 20],
+          position: [side * 0.68, 0.035, -0.025],
+          material: 'lampRed',
+        },
+        // Reverse lamp. Kept small and moved down beside the plate: sitting
+        // directly under the pair of red rings it read as a mouth under two eyes,
+        // which is all anyone could see afterwards.
+        { kind: 'box', args: [0.12, 0.03, 0.03], position: [side * 0.42, -0.08, -0.025], material: 'lampWhite' },
+      ]),
+    ],
+  },
+  {
+    id: 'lamps_front',
+    stage: 'head-lamps',
+    material: 'lampWhite',
+    // Twin projector bowls and a slim daytime strip under them. The strip is what
+    // the eye locks onto as a face, and it costs one box per side.
+    position: [0, 0.72, 2.02],
+    // Same short approach as the tail, for the same reason.
+    explodedOffset: [0, 0.34, 0.26],
+    explodedRotation: [0.5, 0, 0],
+    primitives: [
+      ...[-1, 1].flatMap((side): Primitive[] => [
+        {
+          kind: 'cylinder',
+          args: [0.05, 0.05, 0.035, 18],
+          position: [side * 0.5, 0.03, 0.012],
+          rotation: [Math.PI / 2, 0, 0],
+          material: 'lampWhite',
+        },
+        {
+          kind: 'cylinder',
+          args: [0.05, 0.05, 0.035, 18],
+          position: [side * 0.665, 0.03, 0.012],
+          rotation: [Math.PI / 2, 0, 0],
+          material: 'lampWhite',
+        },
+        { kind: 'box', args: [0.38, 0.028, 0.03], position: [side * 0.58, -0.053, 0.012], material: 'lampWhite' },
       ]),
     ],
   },

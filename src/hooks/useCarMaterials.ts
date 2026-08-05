@@ -5,6 +5,7 @@ import type { MaterialKey } from '@/scenes/carParts'
 import { PRIMER } from '@/scenes/palette'
 import { useEnvironmentMap } from '@/components/3d/environmentContext'
 import { usePaintPass } from '@/hooks/usePaintPass'
+import { useLampPass, ENV_INTENSITY } from '@/hooks/useLampPass'
 import { createOrangePeelNormalMap } from '@/lib/surfaceTextures'
 
 /**
@@ -178,7 +179,8 @@ export function useCarMaterials(): CarMaterials {
       // Raised from 0.85 now that the flat ambient light is gone: with the fill
       // coming from the image-based lighting instead, this is what carries the
       // car's exposure, and it is the term that gives shading actual gradient.
-      reflective.envMapIntensity = 1.15
+      // useLampPass owns it from here, pulling it down for the blackout scene.
+      reflective.envMapIntensity = ENV_INTENSITY
       reflective.needsUpdate = true
     }
   }, [materials, envMap])
@@ -190,8 +192,10 @@ export function useCarMaterials(): CarMaterials {
   }, [materials])
 
   // Lives here rather than in the car component so the swap to a real GLB cannot
-  // silently lose the paint scene: whoever owns bodyPaint owns painting it.
+  // silently lose the paint scene: whoever owns bodyPaint owns painting it. Same
+  // argument for the lamp/atmosphere pass below.
   usePaintPass(materials.bodyPaint)
+  useLampPass(materials)
 
   return materials
 }

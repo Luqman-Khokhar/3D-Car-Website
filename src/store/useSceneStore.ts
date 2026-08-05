@@ -9,6 +9,8 @@ export const SECTIONS = [
   'chassis',
   'engine',
   'body-panels',
+  'tail-lamps',
+  'head-lamps',
   'paint',
   'interior',
   'wheels',

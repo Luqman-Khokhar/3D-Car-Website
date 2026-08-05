@@ -1,19 +1,20 @@
-import { Suspense, useEffect } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows } from '@react-three/drei'
-import { ACESFilmicToneMapping, NoToneMapping } from 'three'
+import { ACESFilmicToneMapping, Color, NoToneMapping } from 'three'
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
 import { CarModel } from './CarModel'
 import { GroundPlane } from './GroundPlane'
 import { Garage } from './Garage'
+import { GarageLights } from './GarageLights'
 import { CameraRig } from './CameraRig'
 import { FreeLookControls } from './FreeLookControls'
 import { GarageEnvironment } from './GarageEnvironment'
 import { PostFX } from './PostFX'
 import { DebugBridge } from './DebugBridge'
 import { debugEnabled } from '@/lib/debug'
-import { GARAGE_WALL, GARAGE_FLOOR, FOG_NEAR, FOG_FAR } from '@/scenes/palette'
-import { ROOM_HEIGHT } from '@/scenes/garage'
+import { lightingState } from '@/animations/lightingState'
+import { GARAGE_WALL, FOG_NEAR, FOG_FAR, NIGHT_AIR } from '@/scenes/palette'
 import { useSceneStore } from '@/store/useSceneStore'
 
 /** Retina is enough; 3x DPR on a phone quadruples fill cost for no visible gain. */
@@ -35,6 +36,36 @@ function ToneMappingPolicy({ managed }: { managed: boolean }) {
   useEffect(() => {
     gl.toneMapping = managed ? NoToneMapping : ACESFilmicToneMapping
   }, [gl, managed])
+
+  return null
+}
+
+/**
+ * Carries the background and the fog from lit garage air to night air across the
+ * two lighting scenes.
+ *
+ * Both have to move, and together. The background is the far wall in every
+ * direction the room does not cover, and the fog is what the far end of the floor
+ * dissolves into — dimming the lights while either stays at daylight value leaves
+ * the car in a dark room punched out of a bright sky, which reads as a rendering
+ * bug rather than as darkness.
+ *
+ * Only touches three when `dim` actually changes, which is 2 of the 11 scenes.
+ */
+function NightPass() {
+  const scene = useThree((s) => s.scene)
+  const applied = useRef(-1)
+  const lit = useMemo(() => new Color(GARAGE_WALL), [])
+  const night = useMemo(() => new Color(NIGHT_AIR), [])
+
+  useFrame(() => {
+    const { dim } = lightingState
+    if (dim === applied.current) return
+    applied.current = dim
+
+    if (scene.background instanceof Color) scene.background.lerpColors(lit, night, dim)
+    if (scene.fog) scene.fog.color.lerpColors(lit, night, dim)
+  })
 
   return null
 }
@@ -69,72 +100,8 @@ export function SceneCanvas() {
         <ToneMappingPolicy managed={!lowPower} />
         <Suspense fallback={null}>
           <GarageEnvironment>
-          {/* Room fill. This was a flat ambientLight at 0.62, which is the most
-              effective way to destroy form there is: it adds the same value to
-              every fragment regardless of which way it faces, so shading loses its
-              gradient and the whole scene goes papery. A hemisphere light costs
-              the same and carries a direction — sky above, bounced floor below.
-              The garage shell is Lambert with no IBL, so this is all it gets, and
-              the values are picked to hold the room at its previous exposure. */}
-          <hemisphereLight args={[GARAGE_WALL, GARAGE_FLOOR, 1.15]} />
-          {/* What is left of the old ambient: just enough to keep deep corners off
-              pure black, low enough not to flatten anything. */}
-          <ambientLight intensity={0.14} />
-          {/* Overhead work light, roughly where a garage gantry lamp would sit. */}
-          <spotLight
-            position={[3.2, 7.5, 4.2]}
-            angle={0.62}
-            penumbra={0.85}
-            intensity={150}
-            castShadow={!lowPower}
-            // 1024 rather than the old 512: with ambient no longer washing the
-            // scene out, the car's own shadows onto itself — hood onto bay, roof
-            // onto side glass — actually read, and at 512 they were mush.
-            shadow-mapSize={1024}
-            // Default near/far spans the whole 120-unit camera range, which wastes
-            // almost all depth precision on empty air above and below the car.
-            shadow-camera-near={4}
-            shadow-camera-far={14}
-            shadow-bias={-0.0008}
-          />
-          {/* Warm bounce off the concrete, filling the shaded side of the body. */}
-          <directionalLight position={[-5, 3, -6]} intensity={0.42} color="#cfc6b4" />
-          {/* Fill from the door/window side. Required, not decorative: the tool
-              wall faces +Z, and neither the -Z directional above nor the tight
-              spotlight cone reaches it, so without this it renders ambient-only
-              and every prop on it reads as a dark smudge. */}
-          <directionalLight position={[2, 4, 9]} intensity={0.5} color="#e8e2d0" />
-          {/* The two ceiling fluorescents nearest the car, as actual area lights
-              rather than emissive props. A point or spot light can only ever put a
-              round hotspot on a panel; a strip puts a long streak down the flank,
-              and that streak is the most recognisable thing in any photograph of a
-              car. Positions match ceilingLights() in src/scenes/garage.ts, so the
-              highlight belongs to a fixture that is visibly overhead.
-
-              Rotating -PI/2 about X aims the light down and lays its height axis
-              along Z, i.e. along the car. Area lights cannot cast shadows and are
-              the most expensive light type per fragment, so there are exactly two
-              and they are skipped entirely on low power. */}
-          {!lowPower && (
-            <>
-              <rectAreaLight
-                position={[-3.4, ROOM_HEIGHT - 0.24, 1.4]}
-                rotation={[-Math.PI / 2, 0, 0]}
-                width={0.3}
-                height={2.4}
-                intensity={22}
-                color="#fff4de"
-              />
-              <rectAreaLight
-                position={[1.6, ROOM_HEIGHT - 0.24, 1.4]}
-                rotation={[-Math.PI / 2, 0, 0]}
-                width={0.3}
-                height={2.4}
-                intensity={22}
-                color="#fff4de"
-              />
-            </>
-          )}
+          <GarageLights lowPower={lowPower} />
+          <NightPass />
           <GroundPlane />
           <Garage />
           {/* Soft occlusion where the car meets the floor. The spotlight shadow

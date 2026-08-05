@@ -3,10 +3,10 @@ import { useSceneStore } from '@/store/useSceneStore'
 import { scrollToTop } from '@/hooks/useSmoothScroll'
 
 /**
- * Fixed copy layer. Only `activeSection` is subscribed, and that changes nine
+ * Fixed copy layer. Only `activeSection` is subscribed, and that changes eleven
  * times across the whole page, so scrolling does not re-render this per frame.
  *
- * All nine blocks stay mounted and crossfade via opacity — mounting/unmounting
+ * All eleven blocks stay mounted and crossfade via opacity — mounting/unmounting
  * text mid-scroll causes a layout flash.
  */
 export function SceneCopy() {

@@ -23,6 +23,14 @@ export const FOG_NEAR = 16
 export const FOG_FAR = 44
 
 /**
+ * What the background and the fog become at full blackout in the head-lamps
+ * scene. Deliberately a cold near-black rather than #000: a true black background
+ * has no hue for the tone map to work with, so the unlit half of the car lands on
+ * it as a flat cut-out with no edge at all.
+ */
+export const NIGHT_AIR = '#080a0e'
+
+/**
  * Body colour. PRIMER is where the paint scene starts and BODY is where it lands;
  * src/hooks/usePaintPass.ts lerps between them off the scrubbed timeline, so the
  * panels fly in bare and are painted in scene 05.

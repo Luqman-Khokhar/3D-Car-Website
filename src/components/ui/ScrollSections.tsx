@@ -2,12 +2,12 @@ import { SECTION_COPY, SCROLL_ROOT_ID } from '@/scenes/sections'
 import { useSceneStore } from '@/store/useSceneStore'
 
 /**
- * Pure scroll length. Nine 100vh spacers give the master ScrollTrigger something
+ * Pure scroll length. Eleven 100vh spacers give the master ScrollTrigger something
  * to measure; all visible copy lives in SceneCopy, which is fixed and crossfades.
  *
  * The copy is deliberately not scrolled-and-pinned per section. With a fixed
- * canvas, a fixed crossfading overlay produces the same read as nine pinned
- * panels without nine pin-spacers fighting Lenis for layout.
+ * canvas, a fixed crossfading overlay produces the same read as eleven pinned
+ * panels without eleven pin-spacers fighting Lenis for layout.
  */
 export function ScrollSections() {
   const freeLook = useSceneStore((s) => s.freeLook)

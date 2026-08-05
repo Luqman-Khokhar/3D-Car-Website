@@ -14,7 +14,7 @@ export interface SectionCopy {
 }
 
 /**
- * Narrative copy for the nine scenes.
+ * Narrative copy for the eleven scenes.
  *
  * Rule for editing: describe only what is actually on screen at that scroll
  * offset. Copy that promises an effect the scene does not perform reads as a
@@ -54,28 +54,40 @@ export const SECTION_COPY: SectionCopy[] = [
     body: 'Sills, arches, doors, hood, deck lid, bumpers. Each one arrives on its own path and stops dead in its place. Panel gaps are the first thing anyone notices and the last thing anyone forgives.',
   },
   {
+    id: 'tail-lamps',
+    label: '05 / Rear Lighting',
+    title: 'Brake First',
+    body: 'Lenses press into the tail housings and the bay lights come down to dusk. Red is the one colour a car has to be read by from behind, and it only proves itself once the room stops competing with it.',
+  },
+  {
+    id: 'head-lamps',
+    label: '06 / Front Lighting',
+    title: 'Eyes Open',
+    body: 'Projectors and a daytime strip seat into the nose, and the garage goes dark around them. Every car has a face, and this is the moment it gets switched on.',
+  },
+  {
     id: 'paint',
-    label: '05 / Paint',
+    label: '07 / Paint',
     title: 'Colour Under Glass',
     body: 'Metallic base, then clear over the top. The clear coat is the whole trick: a second, sharper reflection sitting above the colour. It stops looking like a painted surface and starts looking like depth.',
   },
   {
     id: 'interior',
-    label: '06 / Interior & Glass',
+    label: '08 / Interior & Glass',
     title: 'The Cabin',
     body: 'Seats, dash, windscreen, side glass. The first parts on this car shaped around a person rather than a load path.',
   },
   {
     id: 'wheels',
-    label: '07 / Wheels & Final Assembly',
+    label: '09 / Wheels & Final Assembly',
     title: 'On Its Own Weight',
     body: 'Four wheels roll the length of the car and tuck into the arches. The moment they take the load it stops being a shell and starts being a vehicle.',
   },
   {
     id: 'reveal',
-    label: '08 / Reveal',
+    label: '10 / Reveal',
     title: 'Finished',
-    body: 'Sixteen parts here. Eleven thousand in the real thing. Either way, the order is the only part that is not negotiable.',
+    body: 'Eighteen parts here. Eleven thousand in the real thing. Either way, the order is the only part that is not negotiable.',
   },
 ]
 

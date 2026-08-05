@@ -26,9 +26,14 @@ part split across siblings will animate apart:
 ```
 chassis            engine_block       body_shell         roof
 door_L             door_R             hood               trunk
-bumper_F           bumper_R           interior_seats     windshield
-wheel_FL           wheel_FR           wheel_RL           wheel_RR
+bumper_F           bumper_R           lamps_rear         lamps_front
+interior_seats     windshield         wheel_FL           wheel_FR
+wheel_RL           wheel_RR
 ```
+
+`lamps_rear` and `lamps_front` are the lit elements only — lenses, bowls and the
+daytime strip. Their dark housings belong to `body_shell`, because the two
+lighting scenes fly the lamps into a nose and tail that are already there.
 
 The canonical list lives in `src/scenes/carParts.ts` (`CAR_PARTS[].id`). Extra
 nodes are ignored; missing ones make `requirePart()` throw by design, so a typo

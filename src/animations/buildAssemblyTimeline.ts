@@ -4,6 +4,7 @@ import type { CarPart, Vec3 } from '@/scenes/carParts'
 import { getPart } from './partRegistry'
 import { CAMERA_KEYS, cameraState, sceneTime } from './cameraPath'
 import { paintState } from './paintState'
+import { lightingState } from './lightingState'
 import { SECTIONS } from '@/store/useSceneStore'
 
 /** One timeline second per scene, so scene i is fully reached at t = i. */
@@ -11,6 +12,18 @@ const SCENE_DURATION = 1
 
 /** Fraction of a scene each successive part is delayed by, for a staggered fly-in. */
 const STAGGER = 0.1
+
+/**
+ * Fraction of a scene by which a part's appearance trails the start of its own
+ * fly-in.
+ *
+ * A scene starts at the exact timeline position where the previous scene is fully
+ * reached — which is the offset the previous scene's copy is read at, and the
+ * frame a screenshot lands on. Flipping a part visible there parks it, motionless
+ * and exploded, in the middle of the shot before its own. Two percent of a scene
+ * is invisible as a delay and enough to clear that frame.
+ */
+const REVEAL_EPSILON = 0.02
 
 function explodedPosition(part: CarPart): Vec3 {
   return [
@@ -32,7 +45,7 @@ function explodedRotation(part: CarPart): Vec3 {
  * Builds the single scrubbed master timeline for the whole page.
  *
  * Layout: scene i owns [i - 1, i], so a part installed in scene i animates as
- * the camera arrives there. Total duration is SECTIONS.length - 1 (8), which the
+ * the camera arrives there. Total duration is SECTIONS.length - 1 (10), which the
  * ScrollTrigger maps onto the full document scroll.
  *
  * Everything here is a `fromTo` with `ease: 'none'`. Scrubbed timelines must be
@@ -66,6 +79,34 @@ export function buildAssemblyTimeline() {
     sceneTime('paint') - SCENE_DURATION,
   )
 
+  // --- Atmosphere --------------------------------------------------------
+  // The two lighting scenes are the only place the garage's exposure moves, and
+  // it moves in one direction and back: dusk for the tail lamps, blackout for the
+  // headlights, full lighting again by the time paint starts (a metallic base
+  // coat under clearcoat has nothing to show in a dark room).
+  //
+  // Each `to` starts where the previous one ended, so a reverse scrub retraces
+  // the same curve — see the file header on why nothing here is eased.
+  tl.set(lightingState, { dim: 0, rearGlow: 0, frontGlow: 0 }, 0)
+  tl.to(
+    lightingState,
+    { dim: 0.55, rearGlow: 1, duration: SCENE_DURATION },
+    sceneTime('tail-lamps') - SCENE_DURATION,
+  )
+  tl.to(
+    lightingState,
+    // Rear falls back to a running-light level rather than off: the camera is at
+    // the nose by now, and a tail that switched itself off behind the viewer is
+    // the kind of thing only noticed on the way back up the page.
+    { dim: 1, rearGlow: 0.4, frontGlow: 1, duration: SCENE_DURATION },
+    sceneTime('head-lamps') - SCENE_DURATION,
+  )
+  tl.to(
+    lightingState,
+    { dim: 0, rearGlow: 0.15, frontGlow: 0.15, duration: SCENE_DURATION },
+    sceneTime('paint') - SCENE_DURATION,
+  )
+
   // --- Parts -------------------------------------------------------------
   // Group by stage so the stagger index restarts per scene.
   const byStage = new Map<string, CarPart[]>()
@@ -96,7 +137,7 @@ export function buildAssemblyTimeline() {
       // Hidden until its scene begins. A zero-duration set reverses correctly
       // under scrub, so scrolling back up un-installs the part.
       tl.set(object, { visible: false }, 0)
-      tl.set(object, { visible: true }, at)
+      tl.set(object, { visible: true }, at + REVEAL_EPSILON)
 
       const isWheel = part.id.startsWith('wheel_')
       if (isWheel) {

@@ -3,6 +3,7 @@ import { gsap, ScrollTrigger } from '@/lib/gsap'
 import { buildAssemblyTimeline } from '@/animations/buildAssemblyTimeline'
 import { resetCameraState } from '@/animations/cameraPath'
 import { resetPaintState } from '@/animations/paintState'
+import { resetLightingState } from '@/animations/lightingState'
 import { SECTIONS, useSceneStore } from '@/store/useSceneStore'
 import { SCROLL_ROOT_ID } from '@/scenes/sections'
 
@@ -23,6 +24,7 @@ export function useAssemblyTimeline() {
 
     resetCameraState()
     resetPaintState()
+    resetLightingState()
     const timeline = buildAssemblyTimeline()
 
     // Reduced motion: no scrubbing. Snap to the assembled end state so the car
@@ -43,7 +45,7 @@ export function useAssemblyTimeline() {
       animation: timeline,
       onUpdate: (self) => {
         // Map 0..1 onto scene index. Store writes are cheap here because
-        // activeSection only changes 9 times over the whole page.
+        // activeSection only changes 11 times over the whole page.
         const index = Math.min(
           SECTIONS.length - 1,
           Math.round(self.progress * (SECTIONS.length - 1)),

@@ -16,6 +16,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { CLOCK_FACE_CENTER, GARAGE_PROPS } from '@/scenes/garage'
 import type { GarageMaterialKey, Prop } from '@/scenes/garage'
 import { GARAGE_WALL } from '@/scenes/palette'
+import { lightingState } from '@/animations/lightingState'
 import { useEnvironmentMap } from './environmentContext'
 
 function buildGeometry(prop: Prop): BufferGeometry {
@@ -57,6 +58,12 @@ interface MaterialSpec {
   matte?: boolean
 }
 
+/** Baseline emissive on the ceiling strips, and baseline IBL on every prop that
+ *  gets one. Both are scaled down by the blackout driver below, so they live here
+ *  rather than inline in the spec table and the constructor. */
+const LAMP_EMISSIVE = 1.1
+const PROP_ENV_INTENSITY = 0.7
+
 const MATERIAL_SPECS: Record<GarageMaterialKey, MaterialSpec> = {
   // Matte colours run lighter than they would under IBL: Lambert gets no
   // environment contribution, so values tuned against a Standard material come
@@ -76,7 +83,7 @@ const MATERIAL_SPECS: Record<GarageMaterialKey, MaterialSpec> = {
   rubber: { color: '#1a1c1f', roughness: 0.9, metalness: 0.03 },
   drum: { color: '#3d5f7a', roughness: 0.46, metalness: 0.42 },
   glass: { color: '#b7cddb', roughness: 0.1, metalness: 0.1 },
-  lamp: { color: '#f2efe4', emissive: '#fff6e2', emissiveIntensity: 1.1, matte: true },
+  lamp: { color: '#f2efe4', emissive: '#fff6e2', emissiveIntensity: LAMP_EMISSIVE, matte: true },
 }
 
 function createMaterial(spec: MaterialSpec, envMap: Texture | null): Material {
@@ -87,7 +94,7 @@ function createMaterial(spec: MaterialSpec, envMap: Texture | null): Material {
         emissive: params.emissive,
         emissiveIntensity: params.emissiveIntensity,
       })
-    : new MeshStandardMaterial({ ...params, envMap, envMapIntensity: 0.7 })
+    : new MeshStandardMaterial({ ...params, envMap, envMapIntensity: PROP_ENV_INTENSITY })
 }
 
 /**
@@ -222,6 +229,30 @@ export const Garage = memo(function Garage() {
       }
     }
   }, [groups])
+
+  // Switches the room off along with the light rig. Two things here are not
+  // lights and so survive dimming on their own: the ceiling strips are emissive
+  // geometry, and every metal prop is lit by the environment map. Leaving either
+  // alone gives a blackout with glowing tubes still hanging in it and a chrome
+  // tool wall still catching a room that is no longer lit.
+  const applied = useRef(-1)
+  useFrame(() => {
+    const { dim } = lightingState
+    if (dim === applied.current) return
+    applied.current = dim
+
+    for (const group of groups) {
+      const material = group.material as unknown as {
+        emissiveIntensity?: number
+        envMapIntensity?: number
+      }
+      if (group.key === 'lamp') {
+        material.emissiveIntensity = LAMP_EMISSIVE * (1 - 0.94 * dim)
+      } else if (material.envMapIntensity !== undefined) {
+        material.envMapIntensity = PROP_ENV_INTENSITY * (1 - 0.92 * dim)
+      }
+    }
+  })
 
   return (
     <group name="garage">
