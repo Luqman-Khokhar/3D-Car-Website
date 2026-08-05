@@ -39,10 +39,9 @@ export const CAMERA_KEYS: Record<SectionId, CameraKey> = {
   'body-panels': { theta: 1.15, radius: 6.4, height: 1.9, tx: 0, ty: 0.75, tz: 0 },
   // Dead astern, at lamp height. theta = PI puts the camera on -Z looking back up
   // the car, which is the only angle a full-width bar can be read from: off-axis
-  // the near end dominates and the far end foreshortens into a smear, and the
-  // centre split — the thing that says there are two lamps here — stops sitting
-  // where the eye expects it. Target is pulled back to z -1.0 so the tail fills
-  // the frame rather than sitting in the middle of a full side profile.
+  // the near end dominates, the far end foreshortens into a smear, and the curve
+  // stops being symmetrical. Target is pulled back to z -1.0 so the tail fills the
+  // frame rather than sitting in the middle of a full side profile.
   'tail-lamps': { theta: Math.PI, radius: 3.9, height: 0.94, tx: 0, ty: 0.79, tz: -1.0 },
   // Dead ahead. 2*PI rather than 0 so the swing from the tail keeps turning the
   // same way instead of unwinding back past the flank it just came from — every

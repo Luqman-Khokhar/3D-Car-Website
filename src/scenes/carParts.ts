@@ -620,57 +620,46 @@ function shutLine(axis: 'x' | 'y', size: [number, number, number], inset: number
 /** Half-width of the tail light bar. Stops 80 mm short of the rear quarters so
  *  the lens is set into the tail rather than running off the corners of it. */
 const TAIL_BAR_HALF = 0.84
-/** Segment count. Even, because the pair either side of the centreline is what
- *  splits the bar into a left and a right lamp. */
-const TAIL_BAR_SEGMENTS = 12
-/** Gap between neighbouring segments, and the wider break on the centreline. */
-const TAIL_BAR_GAP = 0.011
-const TAIL_BAR_CENTRE_GAP = 0.055
-/** How far the outermost segment sits below the flat middle of the bar. */
-const TAIL_BAR_DROP = 0.046
-/**
- * Segment height. Deliberately slim: at 52 mm the segments read as a row of
- * separate lit blocks, and the shape being aimed at is a line. A tail bar is
- * recognisable by its length against its thickness, and nothing else.
- */
-const TAIL_BAR_HEIGHT = 0.036
+/** How far the ends of the bar sit below its centre. Small on purpose — this is
+ *  the difference between a car and a cartoon mouth. */
+const TAIL_BAR_DROP = 0.075
+/** Half-thickness of the bar. */
+const TAIL_BAR_TUBE = 0.019
 
 /**
  * The full-width rear light bar, in the `lamps_rear` part's local frame.
  *
- * A row of separate segments rather than one long emissive box, for two reasons.
- * The gaps let the dark housing behind show through, which is what makes the bar
- * read as lit elements set into a trough instead of a painted stripe; and the
- * wider break on the centreline is what tells the eye there are two lamps here,
- * a left and a right, the way the split in a real full-width tail lamp does.
+ * One unbroken arc, drawn as a single torus swept through a shallow angle. The
+ * alternative — a row of boxes stepped down a curve — cannot avoid seams: each
+ * box is straight, so either the joints show as facets or the boxes have to
+ * overlap and the bar thickens wherever they do. A torus arc is genuinely curved
+ * along its whole length and costs one primitive.
  *
- * The quartic drop keeps the middle dead flat and hooks only the last segment or
- * two down at the corners. A constant curve across the whole width bows the bar
- * like a smile and immediately reads as a cartoon face; the flat-then-hook shape
- * is what modern light bars actually do, and it also follows the tail's own
- * corner radius rather than cutting across it.
+ * The geometry is a circle segment fitted to two constraints: it must reach
+ * ±TAIL_BAR_HALF, and it must drop TAIL_BAR_DROP over that span. That fixes the
+ * radius, which comes out around 4.7 m — a very slack curve, which is the point.
+ * Anything tighter reads as a smile rather than as a line following the tail's
+ * own corner radius.
  */
-function tailLightBar(): Primitive[] {
-  const span = TAIL_BAR_HALF * 2
-  const width =
-    (span - TAIL_BAR_GAP * (TAIL_BAR_SEGMENTS - 2) - TAIL_BAR_CENTRE_GAP) / TAIL_BAR_SEGMENTS
+function tailLightBar(): Primitive {
+  // Circle through the two ends and the midpoint: R = (c² + s²) / 2s for a
+  // half-chord c and sagitta s.
+  const radius = (TAIL_BAR_HALF ** 2 + TAIL_BAR_DROP ** 2) / (2 * TAIL_BAR_DROP)
+  const halfArc = Math.asin(TAIL_BAR_HALF / radius)
 
-  const segments: Primitive[] = []
-  let cursor = -TAIL_BAR_HALF
-
-  for (let i = 0; i < TAIL_BAR_SEGMENTS; i++) {
-    const centre = cursor + width / 2
-    const t = centre / TAIL_BAR_HALF
-    segments.push({
-      kind: 'box',
-      args: [width, TAIL_BAR_HEIGHT, 0.022],
-      position: [centre, -TAIL_BAR_DROP * t ** 4, -0.028],
-      material: 'lampRed',
-    })
-    cursor += width + (i === TAIL_BAR_SEGMENTS / 2 - 1 ? TAIL_BAR_CENTRE_GAP : TAIL_BAR_GAP)
+  return {
+    kind: 'torus',
+    args: [radius, TAIL_BAR_TUBE, 8, 96],
+    arc: halfArc * 2,
+    // A torus arc starts at +X and sweeps anticlockwise, so rotating it back by
+    // half its own sweep past the top of the circle centres it on +Y. That puts
+    // the arc's high point on the centreline with both ends falling away — ends
+    // down, not up. Then drop the whole ring by its radius so that high point
+    // lands at local y = 0 instead of 4.7 m above the car.
+    rotation: [0, 0, Math.PI / 2 - halfArc],
+    position: [0, -radius, -0.028],
+    material: 'lampRed',
   }
-
-  return segments
 }
 
 /**
@@ -979,11 +968,11 @@ export const CAR_PARTS: CarPart[] = [
       // tail-lamps scene is continuous across the car (see `lamps_rear`), and a
       // bar crossing two separate pockets with painted panel between them reads as
       // a decal laid over the bodywork instead of as a lens set into it.
-      // Sized to hug the bar — 110 mm tall, dropped 20 mm below its centreline so
-      // it follows the hooked ends. A taller trough leaves painted panel showing
-      // above the lens that then catches the bloom halo, and the lamp ends up
-      // framed in a glowing rectangle.
-      { kind: 'box', args: [1.8, 0.11, 0.06], position: [0, 0.768, -1.895], material: 'shadow' },
+      // Sized to hug the bar, with roughly 15 mm of clearance above its centre and
+      // below its lowest point. A taller trough leaves painted panel showing above
+      // the lens that then catches the bloom halo, and the lamp ends up framed in
+      // a glowing rectangle.
+      { kind: 'box', args: [1.82, 0.145, 0.06], position: [0, 0.75, -1.895], material: 'shadow' },
       // Rear plate, recessed below the bar. Sits above y 0.61, which is where the
       // bumper skin tops out — below that line the bumper hides it entirely.
       { kind: 'box', args: [0.56, 0.15, 0.02], position: [0, 0.68, -1.895], material: 'shadow' },
@@ -1269,7 +1258,7 @@ export const CAR_PARTS: CarPart[] = [
     // in a blacked-out room two white dots below a full-width red bar are the only
     // thing the eye goes to — they compete with the one shape this scene exists
     // to show. Reversing lights on a car parked in a garage are also off.
-    primitives: tailLightBar(),
+    primitives: [tailLightBar()],
   },
   {
     id: 'lamps_front',

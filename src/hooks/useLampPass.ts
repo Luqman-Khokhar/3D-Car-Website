@@ -20,7 +20,7 @@ const LAMP_WHITE_GAIN = 3.6
 // Lower than the white side on purpose. Red's luminance coefficient is a fifth of
 // green's, so a red emissive has to run much hotter than a white one to cross the
 // same bloom threshold — and pushed that far it stops looking red.
-const LAMP_RED_GAIN = 1.4
+const LAMP_RED_GAIN = 1.15
 
 interface Emissive {
   emissiveIntensity: number
