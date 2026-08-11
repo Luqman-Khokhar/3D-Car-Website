@@ -34,7 +34,7 @@ export const SCROLL_SPEEDS = [
 export type ScrollSpeedId = (typeof SCROLL_SPEEDS)[number]['id']
 
 const SCROLL_SPEED_KEY = 'car-assembly:scroll-speed'
-const DEFAULT_SCROLL_SPEED: ScrollSpeedId = 'slow'
+const DEFAULT_SCROLL_SPEED: ScrollSpeedId = 'normal'
 
 /** Preference survives reloads; a bad/absent value falls back to the default. */
 function readStoredScrollSpeed(): ScrollSpeedId {
