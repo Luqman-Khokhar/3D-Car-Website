@@ -13,6 +13,7 @@ import { buildGeometry, createMaterial, MATERIAL_SPECS, PROP_ENV_INTENSITY } fro
 import { garageDoorState, toggleGarageDoor } from '@/animations/garageDoorState'
 import { lightingState } from '@/animations/lightingState'
 import { useEnvironmentMap } from './environmentContext'
+import { WallLightSwitches } from './WallLightSwitches'
 
 /** How fast the chain eases toward its target, as the fraction of the remaining
  *  gap closed per second — same framerate-independent form as CameraRig's
@@ -116,6 +117,7 @@ export const GarageDoor = memo(function GarageDoor() {
         </group>
       ))}
       <DoorButton />
+      <WallLightSwitches />
       <DoorBackdrop />
     </group>
   )

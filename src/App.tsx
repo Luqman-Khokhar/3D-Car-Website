@@ -6,7 +6,6 @@ import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { FreeLookToggle } from '@/components/ui/FreeLookToggle'
 import { ScrollSpeedPicker } from '@/components/ui/ScrollSpeedPicker'
 import { PaintPicker } from '@/components/ui/PaintPicker'
-import { LightSwitches } from '@/components/ui/LightSwitches'
 import { useSmoothScroll } from '@/hooks/useSmoothScroll'
 import { useDeviceTier } from '@/hooks/useDeviceTier'
 import { useAssemblyTimeline } from '@/hooks/useAssemblyTimeline'
@@ -32,7 +31,6 @@ function App() {
       <SceneCopy />
       <FreeLookToggle />
       <ScrollSpeedPicker />
-      <LightSwitches />
       <PaintPicker />
       <ProgressRail />
       <ScrollSections />
