@@ -47,6 +47,50 @@ function readStoredScrollSpeed(): ScrollSpeedId {
   return DEFAULT_SCROLL_SPEED
 }
 
+/**
+ * Manual garage light switches, one per fixture circuit.
+ *
+ * `auto` (the default) leaves that circuit on the scroll-scrubbed atmosphere —
+ * the tail-lamp/head-lamp scenes still black the room out on their own. `on`/`off`
+ * is an explicit switch throw: it wins over the scroll timeline and free look
+ * both, and stays thrown until the button is clicked again, the same way a real
+ * breaker does not reset itself because the story moved to a different scene.
+ */
+export type LightSwitchState = 'auto' | 'on' | 'off'
+
+export const LIGHT_SWITCH_GROUPS = ['ceiling', 'spot', 'headlamps'] as const
+export type LightSwitchGroup = (typeof LIGHT_SWITCH_GROUPS)[number]
+
+const LIGHT_SWITCH_KEY = 'car-assembly:light-switches'
+const DEFAULT_LIGHT_SWITCHES: Record<LightSwitchGroup, LightSwitchState> = {
+  ceiling: 'auto',
+  spot: 'auto',
+  headlamps: 'auto',
+}
+
+/** Click order: follow the story, then force on, then force off, then back to following it. */
+const LIGHT_SWITCH_CYCLE: Record<LightSwitchState, LightSwitchState> = {
+  auto: 'on',
+  on: 'off',
+  off: 'auto',
+}
+
+function readStoredLightSwitches(): Record<LightSwitchGroup, LightSwitchState> {
+  const result = { ...DEFAULT_LIGHT_SWITCHES }
+  try {
+    const stored = localStorage.getItem(LIGHT_SWITCH_KEY)
+    if (!stored) return result
+    const parsed = JSON.parse(stored) as Partial<Record<LightSwitchGroup, string>>
+    for (const group of LIGHT_SWITCH_GROUPS) {
+      const value = parsed[group]
+      if (value === 'auto' || value === 'on' || value === 'off') result[group] = value
+    }
+  } catch {
+    // Private mode / blocked storage / corrupt JSON. Defaults are fine.
+  }
+  return result
+}
+
 export function scrollSpeedMultiplier(id: ScrollSpeedId): number {
   return (SCROLL_SPEEDS.find((s) => s.id === id) ?? SCROLL_SPEEDS[2]).multiplier
 }
@@ -74,6 +118,8 @@ interface SceneState {
   selectedBodyColor: string
   /** User-chosen scroll pacing. useSmoothScroll pushes it into Lenis. */
   scrollSpeed: ScrollSpeedId
+  /** Manual override per light circuit. GarageLights reads this every frame. */
+  lightSwitches: Record<LightSwitchGroup, LightSwitchState>
 
   setActiveSection: (id: SectionId) => void
   setScrollProgress: (p: number) => void
@@ -85,6 +131,7 @@ interface SceneState {
   toggleFreeLook: () => void
   setBodyColor: (hex: string) => void
   setScrollSpeed: (id: ScrollSpeedId) => void
+  cycleLightSwitch: (group: LightSwitchGroup) => void
 }
 
 export const useSceneStore = create<SceneState>((set) => ({
@@ -97,6 +144,7 @@ export const useSceneStore = create<SceneState>((set) => ({
   freeLook: false,
   selectedBodyColor: BODY,
   scrollSpeed: readStoredScrollSpeed(),
+  lightSwitches: readStoredLightSwitches(),
 
   setActiveSection: (activeSection) => set({ activeSection }),
   setScrollProgress: (scrollProgress) => set({ scrollProgress }),
@@ -118,4 +166,14 @@ export const useSceneStore = create<SceneState>((set) => ({
     }
     set({ scrollSpeed })
   },
+  cycleLightSwitch: (group) =>
+    set((s) => {
+      const next = { ...s.lightSwitches, [group]: LIGHT_SWITCH_CYCLE[s.lightSwitches[group]] }
+      try {
+        localStorage.setItem(LIGHT_SWITCH_KEY, JSON.stringify(next))
+      } catch {
+        // Storage unavailable; the switch still works for the rest of the session.
+      }
+      return { lightSwitches: next }
+    }),
 }))

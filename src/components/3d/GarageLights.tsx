@@ -5,6 +5,8 @@ import type { AmbientLight, DirectionalLight, HemisphereLight, PointLight, RectA
 import { lightingState } from '@/animations/lightingState'
 import { GARAGE_WALL, GARAGE_FLOOR } from '@/scenes/palette'
 import { ROOM_HEIGHT } from '@/scenes/garage'
+import { useSceneStore } from '@/store/useSceneStore'
+import type { LightSwitchState } from '@/store/useSceneStore'
 
 /**
  * How much of each light survives a full blackout (`dim === 1`).
@@ -48,6 +50,28 @@ function level(dim: number, floor: number) {
 }
 
 /**
+ * Time constant (seconds) each switched circuit takes to reach a thrown switch's
+ * target, as an exponential approach rather than a snap. Ceiling fluorescents are
+ * the slowest — a tube visibly ramps rather than popping to full output; the spot
+ * is a quicker halogen-style punch; the car's own lamps are behind a relay and are
+ * effectively instant.
+ */
+const CEILING_FADE = 0.35
+const SPOT_FADE = 0.18
+const LAMP_FADE = 0.08
+
+function approach(current: number, target: number, dt: number, tau: number) {
+  return current + (target - current) * (1 - Math.exp(-dt / tau))
+}
+
+/** null = follow the scroll-scrubbed atmosphere untouched; 0/1 = a thrown switch. */
+function switchTarget(state: LightSwitchState): number | null {
+  if (state === 'off') return 0
+  if (state === 'on') return 1
+  return null
+}
+
+/**
  * Every light in the room, plus the car's own lamps, driven off `lightingState`.
  *
  * These are grouped in one component rather than left inline in SceneCanvas
@@ -64,6 +88,17 @@ function level(dim: number, floor: number) {
  * at exactly the moment the scene is meant to be at its most dramatic.
  */
 export function GarageLights({ lowPower }: { lowPower: boolean }) {
+  const ceilingSwitch = useSceneStore((s) => s.lightSwitches.ceiling)
+  const spotSwitch = useSceneStore((s) => s.lightSwitches.spot)
+  const headlampSwitch = useSceneStore((s) => s.lightSwitches.headlamps)
+
+  // Current position of each switched circuit's exponential approach, 0..1.
+  // Seeded at 1 (fully on) to match the hero scene's baseline so a stored 'off'
+  // from a previous visit fades down on mount instead of jump-cutting dark.
+  const ceilingLevel = useRef(1)
+  const spotLevel = useRef(1)
+  const lampLevel = useRef(1)
+
   const hemisphere = useRef<HemisphereLight>(null)
   const ambient = useRef<AmbientLight>(null)
   const spot = useRef<SpotLight>(null)
@@ -88,14 +123,30 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     if (beamR.current) beamR.current.target = beamTargets[1]
   }, [beamTargets])
 
-  useFrame(() => {
+  useFrame((_state, dt) => {
     const { dim, rearGlow, frontGlow } = lightingState
-    const fixture = level(dim, FIXTURE_FLOOR)
-    const fill = level(dim, FILL_FLOOR)
+    const fixtureAuto = level(dim, FIXTURE_FLOOR)
+    const fillAuto = level(dim, FILL_FLOOR)
+
+    // A thrown switch (`on`/`off`) wins over the scroll-scrubbed atmosphere and
+    // free look both — it eases toward 0 or 1 and stays there regardless of what
+    // scene the camera is in. `auto` leaves the circuit on the timeline, exactly
+    // as before this existed.
+    const ceilingTarget = switchTarget(ceilingSwitch)
+    const spotTarget = switchTarget(spotSwitch)
+    const lampTarget = switchTarget(headlampSwitch)
+
+    if (ceilingTarget !== null) ceilingLevel.current = approach(ceilingLevel.current, ceilingTarget, dt, CEILING_FADE)
+    if (spotTarget !== null) spotLevel.current = approach(spotLevel.current, spotTarget, dt, SPOT_FADE)
+    if (lampTarget !== null) lampLevel.current = approach(lampLevel.current, lampTarget, dt, LAMP_FADE)
+
+    const fixture = ceilingTarget !== null ? ceilingLevel.current : fixtureAuto
+    const fill = ceilingTarget !== null ? ceilingLevel.current : fillAuto
+    const spotFixture = spotTarget !== null ? spotLevel.current : fixtureAuto
 
     if (hemisphere.current) hemisphere.current.intensity = BASE.hemisphere * fill
     if (ambient.current) ambient.current.intensity = BASE.ambient * fill
-    if (spot.current) spot.current.intensity = BASE.spot * fixture
+    if (spot.current) spot.current.intensity = BASE.spot * spotFixture
     if (bounce.current) bounce.current.intensity = BASE.bounce * fixture
     if (doorFill.current) doorFill.current.intensity = BASE.doorFill * fixture
     if (ceilingBounce.current) ceilingBounce.current.intensity = BASE.ceilingBounce * fixture
@@ -106,11 +157,13 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     // and everything in a dark one, so the drive is the glow channel scaled by how
     // dark it has got. Without the `dim` term the beams wash out the garage during
     // the scenes either side, where the lamps are installed but the lights are on.
-    const beam = BEAM_INTENSITY * frontGlow * dim
+    // A thrown headlamp switch replaces that whole drive with the eased switch
+    // level instead, same as a driver flicking the lamps on outside their scene.
+    const beam = lampTarget !== null ? BEAM_INTENSITY * lampLevel.current : BEAM_INTENSITY * frontGlow * dim
     if (beamL.current) beamL.current.intensity = beam
     if (beamR.current) beamR.current.intensity = beam
 
-    const wash = TAIL_WASH_INTENSITY * rearGlow * dim
+    const wash = lampTarget !== null ? TAIL_WASH_INTENSITY * lampLevel.current : TAIL_WASH_INTENSITY * rearGlow * dim
     if (tailL.current) tailL.current.intensity = wash
     if (tailR.current) tailR.current.intensity = wash
   })
