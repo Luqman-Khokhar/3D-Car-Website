@@ -2,22 +2,20 @@ import { useSceneStore } from '@/store/useSceneStore'
 import { BODY_SWATCHES } from '@/scenes/palette'
 
 /**
- * Bottom-left swatch row for the paint scene. Only shown from scene 05 onward —
- * offering a colour choice over the chassis or engine scenes invites a pick that
- * then sits invisible for several more scenes, which reads as broken.
+ * Bottom-left swatch row for the paint scene. Visible for the whole scroll
+ * story so the pick is available from the start, not just once scrolled
+ * down to the paint scene.
  *
  * Hidden entirely in free look: there is no scroll position to gate on there,
  * and the legend in FreeLookToggle already owns that bottom-of-screen slot.
  */
 export function PaintPicker() {
   const modelReady = useSceneStore((s) => s.modelReady)
-  const activeSection = useSceneStore((s) => s.activeSection)
   const freeLook = useSceneStore((s) => s.freeLook)
   const selectedBodyColor = useSceneStore((s) => s.selectedBodyColor)
   const setBodyColor = useSceneStore((s) => s.setBodyColor)
 
-  const visible =
-    modelReady && !freeLook && (activeSection === 'paint' || activeSection === 'reveal')
+  const visible = modelReady && !freeLook
 
   if (!visible) return null
 
