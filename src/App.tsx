@@ -4,6 +4,7 @@ import { SceneCopy } from '@/components/ui/SceneCopy'
 import { ProgressRail } from '@/components/ui/ProgressRail'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { FreeLookToggle } from '@/components/ui/FreeLookToggle'
+import { FeatureHint } from '@/components/ui/FeatureHint'
 import { ScrollSpeedPicker } from '@/components/ui/ScrollSpeedPicker'
 import { PaintPicker } from '@/components/ui/PaintPicker'
 import { useSmoothScroll } from '@/hooks/useSmoothScroll'
@@ -30,6 +31,7 @@ function App() {
       </Suspense>
       <SceneCopy />
       <FreeLookToggle />
+      <FeatureHint />
       <ScrollSpeedPicker />
       <PaintPicker />
       <ProgressRail />
