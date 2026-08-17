@@ -72,8 +72,13 @@ const FRONT = ROOM_HALF_Z - WALL_T / 2
 
 /** Actual hole in the front wall the sectional door sits in — floor to header,
  *  so opening the door has somewhere to reveal rather than the wall behind it. */
-const DOOR_OPENING_HALF_WIDTH = 2.6
+export const DOOR_OPENING_HALF_WIDTH = 2.6
 const DOOR_OPENING_HEIGHT = 3.62
+
+/** Depth of the plain white yard beyond the sectional door — the arrow-key
+ *  drive-out area. Width matches DOOR_OPENING_HALF_WIDTH so the car is never
+ *  clamped somewhere no wall exists for. See DriveControls.tsx / OutsideYard.tsx. */
+export const YARD_DEPTH = 6
 
 const box = (
   args: [number, number, number],

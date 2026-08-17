@@ -10,6 +10,7 @@ import { GarageDoor } from './GarageDoor'
 import { GarageLights } from './GarageLights'
 import { CameraRig } from './CameraRig'
 import { FreeLookControls } from './FreeLookControls'
+import { DriveControls } from './DriveControls'
 import { GarageEnvironment } from './GarageEnvironment'
 import { PostFX } from './PostFX'
 import { DebugBridge } from './DebugBridge'
@@ -131,6 +132,8 @@ export function SceneCanvas() {
           <CameraRig />
           {/* Mounted only in free look so exactly one system writes the camera. */}
           {freeLook && <FreeLookControls />}
+          {/* Arrow-key driving, same reachability rule as the door button. */}
+          {freeLook && <DriveControls />}
           {debugEnabled() && <DebugBridge />}
           {!lowPower && <PostFX />}
           </GarageEnvironment>

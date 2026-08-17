@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { CanvasTexture, CylinderGeometry, PlaneGeometry, SRGBColorSpace } from 'three'
+import { CylinderGeometry } from 'three'
 import type { BufferGeometry, Group, Material, Mesh, Texture } from 'three'
 import {
   DOOR_OPEN_TRAVEL,
@@ -14,6 +14,7 @@ import { garageDoorState, toggleGarageDoor } from '@/animations/garageDoorState'
 import { lightingState } from '@/animations/lightingState'
 import { useEnvironmentMap } from './environmentContext'
 import { WallLightSwitches } from './WallLightSwitches'
+import { OutsideYard } from './OutsideYard'
 
 /** How fast the chain eases toward its target, as the fraction of the remaining
  *  gap closed per second — same framerate-independent form as CameraRig's
@@ -118,7 +119,7 @@ export const GarageDoor = memo(function GarageDoor() {
       ))}
       <DoorButton />
       <WallLightSwitches />
-      <DoorBackdrop />
+      <OutsideYard />
     </group>
   )
 })
@@ -198,51 +199,5 @@ const DoorButton = memo(function DoorButton() {
         }}
       />
     </group>
-  )
-})
-
-/** Plain backdrop, hung just outside the opening. There's no exterior scene
- *  yet — this stands in for one rather than exposing the fogged ground plane
- *  stretching to infinity, which reads as a rendering bug through an open door. */
-function createSignTexture(): CanvasTexture {
-  const canvas = document.createElement('canvas')
-  canvas.width = 1536
-  canvas.height = 1024
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = '#161616'
-  ctx.font = '700 130px system-ui, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('COMING SOON', canvas.width / 2, canvas.height / 2 - 30)
-  ctx.font = '400 42px system-ui, sans-serif'
-  ctx.fillStyle = '#6b6b6b'
-  ctx.fillText("the world outside this garage isn't built yet", canvas.width / 2, canvas.height / 2 + 90)
-  const texture = new CanvasTexture(canvas)
-  texture.colorSpace = SRGBColorSpace
-  return texture
-}
-
-const DoorBackdrop = memo(function DoorBackdrop() {
-  const parts = useMemo(() => {
-    const texture = createSignTexture()
-    return {
-      texture,
-      geometry: new PlaneGeometry(8, 5),
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      parts.texture.dispose()
-      parts.geometry.dispose()
-    }
-  }, [parts])
-
-  return (
-    <mesh geometry={parts.geometry} position={[0, 2.5, DOOR_Z + 0.4]} rotation={[0, Math.PI, 0]}>
-      <meshBasicMaterial map={parts.texture} toneMapped={false} />
-    </mesh>
   )
 })

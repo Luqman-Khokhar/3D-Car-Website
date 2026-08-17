@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useMemo } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { CAR_PARTS } from '@/scenes/carParts'
 import type { CarPart } from '@/scenes/carParts'
@@ -7,7 +8,14 @@ import type { MergedGroup } from '@/lib/mergeParts'
 import { useCarMaterials } from '@/hooks/useCarMaterials'
 import type { CarMaterials } from '@/hooks/useCarMaterials'
 import { registerPart, clearRegistry } from '@/animations/partRegistry'
+import { driveState } from '@/animations/driveState'
 import { useSceneStore } from '@/store/useSceneStore'
+
+/** Per-second fraction of the remaining gap closed while easing the car back
+ *  to the garage origin after free look ends — same exponential form as
+ *  garageDoorState's DOOR_SMOOTHING. */
+const DRIVE_RETURN_SMOOTHING = 0.1
+const DRIVE_RETURN_EPSILON = 0.01
 
 interface PartGroupProps {
   part: CarPart
@@ -53,6 +61,7 @@ const PartGroup = memo(function PartGroup({ part, groups, materials }: PartGroup
 export function ProceduralCar() {
   const materials = useCarMaterials()
   const setModelReady = useSceneStore((s) => s.setModelReady)
+  const carGroupRef = useRef<Group>(null)
 
   // Merging is the expensive step, so it happens once for the whole car.
   const merged = useMemo(
@@ -76,8 +85,36 @@ export function ProceduralCar() {
     }
   }, [setModelReady])
 
+  // Drives the car's rigid-body offset from arrow-key input written by
+  // DriveControls — a wrapper transform outside the per-part assembly groups,
+  // so it never fights the timeline's own part tweens.
+  useFrame((_, delta) => {
+    const group = carGroupRef.current
+    if (!group) return
+
+    if (driveState.returning) {
+      const t = 1 - Math.pow(DRIVE_RETURN_SMOOTHING, delta)
+      driveState.x += (0 - driveState.x) * t
+      driveState.z += (0 - driveState.z) * t
+      driveState.yaw += (0 - driveState.yaw) * t
+      if (
+        Math.abs(driveState.x) < DRIVE_RETURN_EPSILON &&
+        Math.abs(driveState.z) < DRIVE_RETURN_EPSILON &&
+        Math.abs(driveState.yaw) < DRIVE_RETURN_EPSILON
+      ) {
+        driveState.x = 0
+        driveState.z = 0
+        driveState.yaw = 0
+        driveState.returning = false
+      }
+    }
+
+    group.position.set(driveState.x, 0, driveState.z)
+    group.rotation.y = driveState.yaw
+  })
+
   return (
-    <group name="car">
+    <group name="car" ref={carGroupRef}>
       {merged.map(({ part, groups }) => (
         <PartGroup key={part.id} part={part} groups={groups} materials={materials} />
       ))}
