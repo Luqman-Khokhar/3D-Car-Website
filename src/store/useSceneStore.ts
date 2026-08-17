@@ -51,10 +51,11 @@ function readStoredScrollSpeed(): ScrollSpeedId {
  * Manual garage light switches, one per fixture circuit.
  *
  * `auto` (the default) leaves that circuit on the scroll-scrubbed atmosphere —
- * the tail-lamp/head-lamp scenes still black the room out on their own. `on`/`off`
- * is an explicit switch throw: it wins over the scroll timeline and free look
- * both, and stays thrown until the button is clicked again, the same way a real
- * breaker does not reset itself because the story moved to a different scene.
+ * the tail-lamp/head-lamp scenes still black the room out on their own. It is a
+ * resting state only, never one of the two clickable faces: the first click
+ * forces `on`, and after that the switch just toggles on/off, the same way a
+ * real breaker does not reset itself because the story moved to a different
+ * scene. `on`/`off` wins over the scroll timeline and free look both.
  */
 export type LightSwitchState = 'auto' | 'on' | 'off'
 
@@ -68,11 +69,13 @@ const DEFAULT_LIGHT_SWITCHES: Record<LightSwitchGroup, LightSwitchState> = {
   headlamps: 'auto',
 }
 
-/** Click order: follow the story, then force on, then force off, then back to following it. */
+/** Click order: two faces only. `auto` is the hidden resting state before the
+ *  switch is ever touched — first click forces it on, and from then on the
+ *  switch just toggles on/off like a real one, never returning to auto. */
 const LIGHT_SWITCH_CYCLE: Record<LightSwitchState, LightSwitchState> = {
   auto: 'on',
   on: 'off',
-  off: 'auto',
+  off: 'on',
 }
 
 function readStoredLightSwitches(): Record<LightSwitchGroup, LightSwitchState> {

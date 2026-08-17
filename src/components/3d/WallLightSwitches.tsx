@@ -9,20 +9,17 @@ import { useSceneStore, LIGHT_SWITCH_GROUPS } from '@/store/useSceneStore'
 import type { LightSwitchGroup, LightSwitchState } from '@/store/useSceneStore'
 
 /** Lit colour per circuit, matched to what each one actually throws — see
- *  GarageLights.tsx. Off is unlit metal; auto is a dim neutral cap, since
- *  nobody has thrown that switch yet. */
+ *  GarageLights.tsx. Off (and the untouched `auto` resting state, which reads
+ *  identically) is unlit metal — two faces only, on or off. */
 const ON_COLOR: Record<LightSwitchGroup, string> = {
   ceiling: '#fff4de',
   spot: '#dce8ff',
   headlamps: '#ff2a18',
 }
-const AUTO_COLOR = '#5a564e'
 const OFF_COLOR = '#141414'
 
 function capColor(group: LightSwitchGroup, state: LightSwitchState): string {
-  if (state === 'on') return ON_COLOR[group]
-  if (state === 'off') return OFF_COLOR
-  return AUTO_COLOR
+  return state === 'on' ? ON_COLOR[group] : OFF_COLOR
 }
 
 /** One gang box per circuit, in a row on the same jamb as the door's push
@@ -38,8 +35,9 @@ const ROW_SPACING = 0.3
  * Wall-mounted light switches beside the garage door button. Each cap glows in
  * the colour of the circuit it drives once thrown, so the bank reads at a
  * glance even with the room lights off — the same reason a real breaker panel
- * carries indicator LEDs. Clicking cycles auto -> on -> off -> auto, mirroring
- * DoorButton's press-and-decay feel for the same tactile, physical read.
+ * carries indicator LEDs. Clicking toggles on/off (first click always forces
+ * on, out of the hidden `auto` resting state), mirroring DoorButton's
+ * press-and-decay feel for the same tactile, physical read.
  *
  * Only reachable in free-look, same as DoorButton and for the same reason: the
  * scroll spacers over the canvas swallow pointer events outside it.

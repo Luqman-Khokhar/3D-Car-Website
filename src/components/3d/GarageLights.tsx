@@ -33,6 +33,13 @@ const BEAM_INTENSITY = 78
  */
 const TAIL_WASH_INTENSITY = 0.22
 
+/** Ceiling strip fixture grid, mirroring `ceilingLights()` in
+ *  src/scenes/garage.ts and `LAMP_X`/`LAMP_Z` in GarageEnvironment.tsx — all
+ *  three have to stay in step so every tube the viewer sees overhead is one
+ *  that actually lights the floor beneath it. */
+const STRIP_X = [-3.4, 1.6]
+const STRIP_Z = [-4.6, 1.4, 6.2]
+
 /** Baseline intensities, so the dim driver has something to scale against
  *  without re-reading JSX defaults. Must stay in step with the elements below. */
 const BASE = {
@@ -105,8 +112,7 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
   const bounce = useRef<DirectionalLight>(null)
   const doorFill = useRef<DirectionalLight>(null)
   const ceilingBounce = useRef<DirectionalLight>(null)
-  const stripL = useRef<RectAreaLight>(null)
-  const stripR = useRef<RectAreaLight>(null)
+  const stripRefs = useRef<(RectAreaLight | null)[]>([])
   const beamL = useRef<SpotLight>(null)
   const beamR = useRef<SpotLight>(null)
   const tailL = useRef<PointLight>(null)
@@ -150,8 +156,9 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     if (bounce.current) bounce.current.intensity = BASE.bounce * fixture
     if (doorFill.current) doorFill.current.intensity = BASE.doorFill * fixture
     if (ceilingBounce.current) ceilingBounce.current.intensity = BASE.ceilingBounce * fixture
-    if (stripL.current) stripL.current.intensity = BASE.strip * fixture
-    if (stripR.current) stripR.current.intensity = BASE.strip * fixture
+    for (const strip of stripRefs.current) {
+      if (strip) strip.intensity = BASE.strip * fixture
+    }
 
     // The car's own lamps run the other way: they are worth nothing in a lit room
     // and everything in a dark one, so the drive is the glow channel scaled by how
@@ -219,39 +226,36 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
         intensity={BASE.ceilingBounce}
         color="#d8d0c0"
       />
-      {/* The two ceiling fluorescents nearest the car, as actual area lights
-          rather than emissive props. A point or spot light can only ever put a
-          round hotspot on a panel; a strip puts a long streak down the flank,
-          and that streak is the most recognisable thing in any photograph of a
-          car. Positions match ceilingLights() in src/scenes/garage.ts, so the
-          highlight belongs to a fixture that is visibly overhead.
+      {/* All six ceiling fluorescents, as actual area lights rather than
+          emissive props. A point or spot light can only ever put a round
+          hotspot on a panel; a strip puts a long streak down the flank, and
+          that streak is the most recognisable thing in any photograph of a
+          car. Positions match ceilingLights() in src/scenes/garage.ts, so
+          every fixture the viewer can see overhead actually throws light —
+          previously only the middle row (z=1.4) did, so the other two rows
+          of tubes glowed without the floor or car reading as lit by them.
 
           Rotating -PI/2 about X aims the light down and lays its height axis
           along Z, i.e. along the car. Area lights cannot cast shadows and are
-          the most expensive light type per fragment, so there are exactly two
-          and they are skipped entirely on low power. */}
-      {!lowPower && (
-        <>
-          <rectAreaLight
-            ref={stripL}
-            position={[-3.4, ROOM_HEIGHT - 0.24, 1.4]}
-            rotation={[-Math.PI / 2, 0, 0]}
-            width={0.3}
-            height={2.4}
-            intensity={BASE.strip}
-            color="#fff4de"
-          />
-          <rectAreaLight
-            ref={stripR}
-            position={[1.6, ROOM_HEIGHT - 0.24, 1.4]}
-            rotation={[-Math.PI / 2, 0, 0]}
-            width={0.3}
-            height={2.4}
-            intensity={BASE.strip}
-            color="#fff4de"
-          />
-        </>
-      )}
+          the most expensive light type per fragment, so all six are skipped
+          entirely on low power, same as the original two. */}
+      {!lowPower &&
+        STRIP_X.map((x, xi) =>
+          STRIP_Z.map((z, zi) => (
+            <rectAreaLight
+              key={`${xi}-${zi}`}
+              ref={(el) => {
+                stripRefs.current[xi * STRIP_Z.length + zi] = el
+              }}
+              position={[x, ROOM_HEIGHT - 0.24, z]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              width={0.3}
+              height={2.4}
+              intensity={BASE.strip}
+              color="#fff4de"
+            />
+          )),
+        )}
       {/* --- The car's headlights as real light sources. Emissive geometry plus
           bloom makes a lamp look lit; only an actual beam makes the room look lit
           *by* it, and the second is what sells the blackout — two cones on the
