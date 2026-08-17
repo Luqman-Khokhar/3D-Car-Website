@@ -10,7 +10,11 @@ export type GarageMaterialKey =
   | 'redPaint'
   | 'crate'
   | 'rubber'
-  | 'lamp'
+  /** Ceiling tube glass, split one key per row (back/mid/front) so each row's
+   *  three wall switch can dim its own pair of tubes independently. */
+  | 'lampBack'
+  | 'lampMid'
+  | 'lampFront'
   | 'door'
   | 'drum'
   | 'marking'
@@ -437,18 +441,23 @@ export function doorPanelPose(s: number): { y: number; z: number; rotX: number }
   return { y: DOOR_TRACK_Y, z: DOOR_Z - DOOR_CURVE_RADIUS - extra, rotX: -Math.PI / 2 }
 }
 
-/** Ceiling strip lights. Emissive only — adding real lights per fixture would
- *  cost a full lighting term per fragment across the whole scene. */
+/** Ceiling strip lights, three rows deep (back/mid/front), each row wired to
+ *  its own wall switch — see LIGHT_SWITCH_GROUPS in useSceneStore.ts. */
 function ceilingLights(): Prop[] {
   const props: Prop[] = []
   const y = ROOM_HEIGHT - 0.22
+  const rows: Array<[number, GarageMaterialKey]> = [
+    [-4.6, 'lampBack'],
+    [1.4, 'lampMid'],
+    [6.2, 'lampFront'],
+  ]
 
   for (const x of [-3.4, 1.6]) {
-    for (const z of [-4.6, 1.4, 6.2]) {
+    for (const [z, material] of rows) {
       // Housing.
       props.push(box([0.34, 0.12, 2.5], [x, y + 0.08, z], 'darkMetal'))
       // Tube.
-      props.push(box([0.26, 0.07, 2.36], [x, y, z], 'lamp'))
+      props.push(box([0.26, 0.07, 2.36], [x, y, z], material))
       // Chains.
       props.push(box([0.03, 0.22, 0.03], [x, y + 0.2, z - 1.1], 'darkMetal'))
       props.push(box([0.03, 0.22, 0.03], [x, y + 0.2, z + 1.1], 'darkMetal'))

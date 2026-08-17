@@ -12,7 +12,9 @@ import type { LightSwitchGroup, LightSwitchState } from '@/store/useSceneStore'
  *  GarageLights.tsx. Off (and the untouched `auto` resting state, which reads
  *  identically) is unlit metal — two faces only, on or off. */
 const ON_COLOR: Record<LightSwitchGroup, string> = {
-  ceiling: '#fff4de',
+  tubeBack: '#fff4de',
+  tubeMid: '#fff4de',
+  tubeFront: '#fff4de',
   spot: '#dce8ff',
   headlamps: '#ff2a18',
 }

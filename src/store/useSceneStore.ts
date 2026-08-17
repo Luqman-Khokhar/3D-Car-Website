@@ -59,12 +59,17 @@ function readStoredScrollSpeed(): ScrollSpeedId {
  */
 export type LightSwitchState = 'auto' | 'on' | 'off'
 
-export const LIGHT_SWITCH_GROUPS = ['ceiling', 'spot', 'headlamps'] as const
+/** Ceiling tubes are three independent rows (back/mid/front, matching the
+ *  physical rows in ceilingLights() in src/scenes/garage.ts) rather than one
+ *  circuit, so each row's pair of tubes can be switched on its own. */
+export const LIGHT_SWITCH_GROUPS = ['tubeBack', 'tubeMid', 'tubeFront', 'spot', 'headlamps'] as const
 export type LightSwitchGroup = (typeof LIGHT_SWITCH_GROUPS)[number]
 
 const LIGHT_SWITCH_KEY = 'car-assembly:light-switches'
 const DEFAULT_LIGHT_SWITCHES: Record<LightSwitchGroup, LightSwitchState> = {
-  ceiling: 'auto',
+  tubeBack: 'auto',
+  tubeMid: 'auto',
+  tubeFront: 'auto',
   spot: 'auto',
   headlamps: 'auto',
 }

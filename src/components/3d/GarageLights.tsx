@@ -95,14 +95,18 @@ export function switchTarget(state: LightSwitchState): number | null {
  * at exactly the moment the scene is meant to be at its most dramatic.
  */
 export function GarageLights({ lowPower }: { lowPower: boolean }) {
-  const ceilingSwitch = useSceneStore((s) => s.lightSwitches.ceiling)
+  const tubeBackSwitch = useSceneStore((s) => s.lightSwitches.tubeBack)
+  const tubeMidSwitch = useSceneStore((s) => s.lightSwitches.tubeMid)
+  const tubeFrontSwitch = useSceneStore((s) => s.lightSwitches.tubeFront)
   const spotSwitch = useSceneStore((s) => s.lightSwitches.spot)
   const headlampSwitch = useSceneStore((s) => s.lightSwitches.headlamps)
 
   // Current position of each switched circuit's exponential approach, 0..1.
   // Seeded at 1 (fully on) to match the hero scene's baseline so a stored 'off'
   // from a previous visit fades down on mount instead of jump-cutting dark.
-  const ceilingLevel = useRef(1)
+  const backLevel = useRef(1)
+  const midLevel = useRef(1)
+  const frontLevel = useRef(1)
   const spotLevel = useRef(1)
   const lampLevel = useRef(1)
 
@@ -138,17 +142,31 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     // free look both — it eases toward 0 or 1 and stays there regardless of what
     // scene the camera is in. `auto` leaves the circuit on the timeline, exactly
     // as before this existed.
-    const ceilingTarget = switchTarget(ceilingSwitch)
+    const backTarget = switchTarget(tubeBackSwitch)
+    const midTarget = switchTarget(tubeMidSwitch)
+    const frontTarget = switchTarget(tubeFrontSwitch)
     const spotTarget = switchTarget(spotSwitch)
     const lampTarget = switchTarget(headlampSwitch)
 
-    if (ceilingTarget !== null) ceilingLevel.current = approach(ceilingLevel.current, ceilingTarget, dt, CEILING_FADE)
+    if (backTarget !== null) backLevel.current = approach(backLevel.current, backTarget, dt, CEILING_FADE)
+    if (midTarget !== null) midLevel.current = approach(midLevel.current, midTarget, dt, CEILING_FADE)
+    if (frontTarget !== null) frontLevel.current = approach(frontLevel.current, frontTarget, dt, CEILING_FADE)
     if (spotTarget !== null) spotLevel.current = approach(spotLevel.current, spotTarget, dt, SPOT_FADE)
     if (lampTarget !== null) lampLevel.current = approach(lampLevel.current, lampTarget, dt, LAMP_FADE)
 
-    const fixture = ceilingTarget !== null ? ceilingLevel.current : fixtureAuto
-    const fill = ceilingTarget !== null ? ceilingLevel.current : fillAuto
+    // Each row lights its own pair of strips independently...
+    const backFixture = backTarget !== null ? backLevel.current : fixtureAuto
+    const midFixture = midTarget !== null ? midLevel.current : fixtureAuto
+    const frontFixture = frontTarget !== null ? frontLevel.current : fixtureAuto
     const spotFixture = spotTarget !== null ? spotLevel.current : fixtureAuto
+
+    // ...but the room's general ambience (hemisphere/ambient/bounce/fill) isn't
+    // tied to any one row, so it tracks the average of whichever rows are
+    // thrown, falling back to the scroll-scrubbed atmosphere when none are.
+    const anyTubeThrown = backTarget !== null || midTarget !== null || frontTarget !== null
+    const tubeAvg = (backFixture + midFixture + frontFixture) / 3
+    const fixture = anyTubeThrown ? tubeAvg : fixtureAuto
+    const fill = anyTubeThrown ? tubeAvg : fillAuto
 
     if (hemisphere.current) hemisphere.current.intensity = BASE.hemisphere * fill
     if (ambient.current) ambient.current.intensity = BASE.ambient * fill
@@ -156,9 +174,12 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     if (bounce.current) bounce.current.intensity = BASE.bounce * fixture
     if (doorFill.current) doorFill.current.intensity = BASE.doorFill * fixture
     if (ceilingBounce.current) ceilingBounce.current.intensity = BASE.ceilingBounce * fixture
-    for (const strip of stripRefs.current) {
-      if (strip) strip.intensity = BASE.strip * fixture
-    }
+    // STRIP_Z is [back, mid, front] and stripRefs is flattened x-major (see the
+    // JSX below), so each ref's row is its flat index mod STRIP_Z.length.
+    const rowFixture = [backFixture, midFixture, frontFixture]
+    stripRefs.current.forEach((strip, i) => {
+      if (strip) strip.intensity = BASE.strip * rowFixture[i % STRIP_Z.length]
+    })
 
     // The car's own lamps run the other way: they are worth nothing in a lit room
     // and everything in a dark one, so the drive is the glow channel scaled by how

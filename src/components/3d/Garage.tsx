@@ -153,7 +153,12 @@ export const MATERIAL_SPECS: Record<GarageMaterialKey, MaterialSpec> = {
   // rather than blue — the shell's hemisphere fill tints matte surfaces toward
   // the sky colour, and a cool seam came out navy.
   seam: { color: '#2c2e30', matte: true },
-  lamp: { color: '#f2efe4', emissive: '#fff6e2', emissiveIntensity: LAMP_EMISSIVE, matte: true },
+  // Split per row (back/mid/front) rather than one shared 'lamp' key, so each
+  // row's wall switch can fade only its own pair of tubes — see the per-row
+  // useFrame block below.
+  lampBack: { color: '#f2efe4', emissive: '#fff6e2', emissiveIntensity: LAMP_EMISSIVE, matte: true },
+  lampMid: { color: '#f2efe4', emissive: '#fff6e2', emissiveIntensity: LAMP_EMISSIVE, matte: true },
+  lampFront: { color: '#f2efe4', emissive: '#fff6e2', emissiveIntensity: LAMP_EMISSIVE, matte: true },
 }
 
 /** Albedo + normal for the shell, tinted at generation time — so the material's
@@ -339,25 +344,35 @@ export const Garage = memo(function Garage() {
   // geometry, and every metal prop is lit by the environment map. Leaving either
   // alone gives a blackout with glowing tubes still hanging in it and a chrome
   // tool wall still catching a room that is no longer lit.
-  const ceilingSwitch = useSceneStore((s) => s.lightSwitches.ceiling)
+  const tubeBackSwitch = useSceneStore((s) => s.lightSwitches.tubeBack)
+  const tubeMidSwitch = useSceneStore((s) => s.lightSwitches.tubeMid)
+  const tubeFrontSwitch = useSceneStore((s) => s.lightSwitches.tubeFront)
   // Tracks the same thrown-switch fade as the ceiling fixtures in GarageLights,
-  // so the tube geometry's own glow goes out with the light it is standing in
-  // for rather than only reacting to the scroll-scrubbed atmosphere.
-  const ceilingLevel = useRef(1)
+  // so each row's tube geometry goes out with the light it is standing in for
+  // rather than only reacting to the scroll-scrubbed atmosphere.
+  const backLevel = useRef(1)
+  const midLevel = useRef(1)
+  const frontLevel = useRef(1)
   const applied = useRef(-1)
   useFrame((_state, dt) => {
     const { dim } = lightingState
-    const ceilingTarget = switchTarget(ceilingSwitch)
-    if (ceilingTarget !== null) {
-      ceilingLevel.current = approach(ceilingLevel.current, ceilingTarget, dt, CEILING_FADE)
-    } else if (dim === applied.current) {
+    const backTarget = switchTarget(tubeBackSwitch)
+    const midTarget = switchTarget(tubeMidSwitch)
+    const frontTarget = switchTarget(tubeFrontSwitch)
+    const anyTubeThrown = backTarget !== null || midTarget !== null || frontTarget !== null
+    if (backTarget !== null) backLevel.current = approach(backLevel.current, backTarget, dt, CEILING_FADE)
+    if (midTarget !== null) midLevel.current = approach(midLevel.current, midTarget, dt, CEILING_FADE)
+    if (frontTarget !== null) frontLevel.current = approach(frontLevel.current, frontTarget, dt, CEILING_FADE)
+    if (!anyTubeThrown && dim === applied.current) {
       return
     }
     applied.current = dim
 
-    // Ceiling strips follow the thrown switch when one is thrown; every other
-    // emissive (the door/window glazing) only ever follows the atmosphere dim.
-    const lampDim = ceilingTarget !== null ? 1 - ceilingLevel.current : dim
+    // Each row's strip follows its own thrown switch; every other emissive
+    // (the door/window glazing) only ever follows the atmosphere dim.
+    const backDim = backTarget !== null ? 1 - backLevel.current : dim
+    const midDim = midTarget !== null ? 1 - midLevel.current : dim
+    const frontDim = frontTarget !== null ? 1 - frontLevel.current : dim
 
     for (const group of groups) {
       const material = group.material as unknown as {
@@ -369,7 +384,10 @@ export const Garage = memo(function Garage() {
       // casing the lamps, so glazing added later dims without touching this.
       const emissive = MATERIAL_SPECS[group.key].emissiveIntensity
       if (emissive !== undefined) {
-        const groupDim = group.key === 'lamp' ? lampDim : dim
+        let groupDim = dim
+        if (group.key === 'lampBack') groupDim = backDim
+        else if (group.key === 'lampMid') groupDim = midDim
+        else if (group.key === 'lampFront') groupDim = frontDim
         material.emissiveIntensity = emissive * (1 - 0.94 * groupDim)
       }
       if (material.envMapIntensity !== undefined) {
