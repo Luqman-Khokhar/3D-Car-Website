@@ -66,6 +66,11 @@ const LEFT = -ROOM_HALF_X + WALL_T / 2
 const RIGHT = ROOM_HALF_X - WALL_T / 2
 const FRONT = ROOM_HALF_Z - WALL_T / 2
 
+/** Actual hole in the front wall the sectional door sits in — floor to header,
+ *  so opening the door has somewhere to reveal rather than the wall behind it. */
+const DOOR_OPENING_HALF_WIDTH = 2.6
+const DOOR_OPENING_HEIGHT = 3.62
+
 const box = (
   args: [number, number, number],
   position: Vec3,
@@ -86,9 +91,17 @@ function shell(): Prop[] {
   const w = ROOM_HALF_X * 2
   const d = ROOM_HALF_Z * 2
   const h = ROOM_HEIGHT
+  // Front wall is built around the door opening rather than as one slab: a
+  // door leaf that retracts needs an actual hole behind it, not a solid wall
+  // that happens to be dressed with panels.
+  const openHalfW = DOOR_OPENING_HALF_WIDTH
+  const openH = DOOR_OPENING_HEIGHT
+  const sideW = ROOM_HALF_X - openHalfW
   return [
     box([w, h, WALL_T], [0, h / 2, -ROOM_HALF_Z], 'wall'),
-    box([w, h, WALL_T], [0, h / 2, ROOM_HALF_Z], 'wall'),
+    box([sideW, h, WALL_T], [-(openHalfW + sideW / 2), h / 2, ROOM_HALF_Z], 'wall'),
+    box([sideW, h, WALL_T], [openHalfW + sideW / 2, h / 2, ROOM_HALF_Z], 'wall'),
+    box([openHalfW * 2, h - openH, WALL_T], [0, openH + (h - openH) / 2, ROOM_HALF_Z], 'wall'),
     box([WALL_T, h, d], [-ROOM_HALF_X, h / 2, 0], 'wall'),
     box([WALL_T, h, d], [ROOM_HALF_X, h / 2, 0], 'wall'),
     box([w, WALL_T, d], [0, h, 0], 'ceiling'),
@@ -299,26 +312,129 @@ function rightBay(): Prop[] {
   return props
 }
 
-/** Sectional garage door on the front wall. */
+/**
+ * Sectional door's closed face, on the front wall. The moving leaf (panels,
+ * ribs, vision lights, seal, handle) is not part of the static room — it lives
+ * in DOOR_PANELS below and is driven every frame by GarageDoor.tsx, so both the
+ * static surround here and the animated leaf agree on the same face plane.
+ */
+export const DOOR_Z = FRONT - 0.1
+
+/** Door surround only: guide rails and header. The leaf itself is dynamic. */
 function garageDoor(): Prop[] {
-  const props: Prop[] = []
-  const z = FRONT - 0.1
-  const panels = 5
-  const panelH = 0.62
+  const z = DOOR_Z
+  return [
+    box([0.1, 3.5, 0.14], [-2.55, 1.75, z - 0.06], 'darkMetal'),
+    box([0.1, 3.5, 0.14], [2.55, 1.75, z - 0.06], 'darkMetal'),
+    box([5.4, 0.16, 0.2], [0, 3.6, z - 0.06], 'darkMetal'),
+  ]
+}
 
-  for (let i = 0; i < panels; i++) {
-    const y = 0.36 + i * (panelH + 0.03)
-    props.push(box([5.0, panelH, 0.08], [0, y, z], 'door'))
-    // Two ribs per panel.
-    props.push(box([4.86, 0.05, 0.03], [0, y + 0.16, z - 0.05], 'darkMetal'))
-    props.push(box([4.86, 0.05, 0.03], [0, y - 0.16, z - 0.05], 'darkMetal'))
+/**
+ * Moving-leaf geometry and kinematics for the sectional door.
+ *
+ * A real sectional door is a chain of rigid panels riding a track that runs
+ * straight up beside the opening, then curves onto a horizontal run along the
+ * ceiling. The panels don't each animate independently — they stay spaced
+ * exactly as they were when closed and the whole chain advances by one
+ * arc-length parameter, `s`. Low panels are still straight and vertical while
+ * a high panel is already mid-curve, which is exactly what makes a real door
+ * look like a chain going over a pulley rather than a shutter sliding up.
+ *
+ * `s` is measured in metres from the floor: 0..DOOR_CURVE_START_Y is the
+ * straight vertical run (s === world Y), DOOR_CURVE_START_Y.. is the quarter
+ * -circle bend, and beyond that it is metres travelled horizontally into the
+ * bay along the ceiling track.
+ */
+export const DOOR_PANEL_COUNT = 5
+const DOOR_PANEL_H = 0.62
+const DOOR_PANEL_GAP = 0.03
+export const DOOR_PANEL_SPACING = DOOR_PANEL_H + DOOR_PANEL_GAP
+export const DOOR_WIDTH = 5.0
+
+/** Height of the horizontal ceiling track, matching the header hardware above. */
+export const DOOR_TRACK_Y = DOOR_OPENING_HEIGHT
+/** Bend radius of the curve from vertical rail onto the horizontal track. */
+export const DOOR_CURVE_RADIUS = 0.3
+/** Arc-length where the vertical run ends and the curve begins. */
+export const DOOR_CURVE_START_S = DOOR_TRACK_Y - DOOR_CURVE_RADIUS
+/** Arc-length where the curve ends and the horizontal run begins. */
+export const DOOR_CURVE_END_S = DOOR_CURVE_START_S + DOOR_CURVE_RADIUS * (Math.PI / 2)
+/** Total arc-length the chain advances going from fully closed to fully open —
+ *  one door-height's worth, so the bottom panel ends up where the top panel
+ *  started and the chain never stretches or gaps. */
+export const DOOR_OPEN_TRAVEL = 3.9
+
+/** A single flat piece riding on a door panel, in the panel's own rest frame
+ *  (offset from the panel's closed-position centre at (0, restY, DOOR_Z)). */
+export interface DoorPart {
+  args: [number, number, number]
+  offset: Vec3
+  material: GarageMaterialKey
+}
+
+export interface DoorPanel {
+  index: number
+  /** Arc-length coordinate of this panel's centre when the door is closed —
+   *  equal to its closed-position world Y, since the vertical run is 1:1 with
+   *  world Y. */
+  restS: number
+  parts: DoorPart[]
+}
+
+function buildDoorPanels(): DoorPanel[] {
+  const panels: DoorPanel[] = []
+
+  for (let i = 0; i < DOOR_PANEL_COUNT; i++) {
+    const restS = 0.36 + i * DOOR_PANEL_SPACING
+    const parts: DoorPart[] = [
+      { args: [DOOR_WIDTH, DOOR_PANEL_H, 0.08], offset: [0, 0, 0], material: 'door' },
+      { args: [4.86, 0.05, 0.03], offset: [0, 0.16, -0.05], material: 'darkMetal' },
+      { args: [4.86, 0.05, 0.03], offset: [0, -0.16, -0.05], material: 'darkMetal' },
+    ]
+
+    // Weather seal along the bottom edge of the bottom panel.
+    if (i === 0) {
+      parts.push({ args: [DOOR_WIDTH, 0.06, 0.11], offset: [0, 0.055 - restS, 0], material: 'rubber' })
+    }
+    // Lift handle, roughly waist height.
+    if (i === 1) {
+      parts.push({ args: [0.34, 0.06, 0.05], offset: [0, 0.72 - restS, -0.07], material: 'steel' })
+    }
+    // Vision lights in the top panel: frame behind, glazing proud of the face.
+    if (i === DOOR_PANEL_COUNT - 1) {
+      for (let v = 0; v < 4; v++) {
+        const x = -1.65 + v * 1.1
+        parts.push({ args: [0.7, 0.38, 0.02], offset: [x, 2.95 - restS, -0.05], material: 'darkMetal' })
+        parts.push({ args: [0.62, 0.3, 0.02], offset: [x, 2.95 - restS, -0.07], material: 'glass' })
+      }
+    }
+
+    panels.push({ index: i, restS, parts })
   }
-  // Guide rails and header.
-  props.push(box([0.1, 3.5, 0.14], [-2.55, 1.75, z - 0.06], 'darkMetal'))
-  props.push(box([0.1, 3.5, 0.14], [2.55, 1.75, z - 0.06], 'darkMetal'))
-  props.push(box([5.4, 0.16, 0.2], [0, 3.6, z - 0.06], 'darkMetal'))
 
-  return props
+  return panels
+}
+
+export const DOOR_PANELS: DoorPanel[] = buildDoorPanels()
+
+/**
+ * Maps an arc-length position to a world (y, z) and an X rotation, for the
+ * door's own centre plane (x = 0, wall face). Used every frame per panel — see
+ * GarageDoor.tsx.
+ */
+export function doorPanelPose(s: number): { y: number; z: number; rotX: number } {
+  if (s <= DOOR_CURVE_START_S) {
+    return { y: s, z: DOOR_Z, rotX: 0 }
+  }
+  if (s <= DOOR_CURVE_END_S) {
+    const theta = (s - DOOR_CURVE_START_S) / DOOR_CURVE_RADIUS
+    const z = DOOR_Z - DOOR_CURVE_RADIUS + DOOR_CURVE_RADIUS * Math.cos(theta)
+    const y = DOOR_CURVE_START_S + DOOR_CURVE_RADIUS * Math.sin(theta)
+    return { y, z, rotX: -theta }
+  }
+  const extra = s - DOOR_CURVE_END_S
+  return { y: DOOR_TRACK_Y, z: DOOR_Z - DOOR_CURVE_RADIUS - extra, rotX: -Math.PI / 2 }
 }
 
 /** Ceiling strip lights. Emissive only — adding real lights per fixture would
@@ -656,7 +772,7 @@ function slabDetail(): Prop[] {
  */
 function doorHardware(): Prop[] {
   const props: Prop[] = []
-  const z = FRONT - 0.1
+  const z = DOOR_Z
 
   // Jambs either side of the opening.
   for (const x of [-2.72, 2.72]) {
@@ -688,18 +804,6 @@ function doorHardware(): Prop[] {
   props.push(box([0.09, 0.13, 3.2], [0, 3.66, z - 1.7], 'galv'))
   props.push(box([0.04, 0.46, 0.04], [-0.2, 3.9, z - 3.9], 'galv'))
   props.push(box([0.04, 0.46, 0.04], [0.2, 3.9, z - 3.9], 'galv'))
-
-  // Weather seal along the bottom panel, and a lift handle.
-  props.push(box([5.0, 0.06, 0.11], [0, 0.055, z], 'rubber'))
-  props.push(box([0.34, 0.06, 0.05], [0, 0.72, z - 0.07], 'steel'))
-  // Vision lights in the top panel, so the door is not a blank slab. Both sit
-  // proud of the panel face on the room side (-z), frame behind, glazing in
-  // front of it — the panel is opaque, so anything at the panel's own depth is
-  // simply not there.
-  for (let i = 0; i < 4; i++) {
-    props.push(box([0.7, 0.38, 0.02], [-1.65 + i * 1.1, 2.95, z - 0.05], 'darkMetal'))
-    props.push(box([0.62, 0.3, 0.02], [-1.65 + i * 1.1, 2.95, z - 0.07], 'glass'))
-  }
 
   return props
 }

@@ -6,6 +6,7 @@ import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLigh
 import { CarModel } from './CarModel'
 import { GroundPlane } from './GroundPlane'
 import { Garage } from './Garage'
+import { GarageDoor } from './GarageDoor'
 import { GarageLights } from './GarageLights'
 import { CameraRig } from './CameraRig'
 import { FreeLookControls } from './FreeLookControls'
@@ -104,6 +105,7 @@ export function SceneCanvas() {
           <NightPass />
           <GroundPlane />
           <Garage />
+          <GarageDoor />
           {/* Soft occlusion where the car meets the floor. The spotlight shadow
               alone leaves a gap under the sills that reads as the car hovering.
               Still worth its depth pass even with N8AO in the chain: screen-space

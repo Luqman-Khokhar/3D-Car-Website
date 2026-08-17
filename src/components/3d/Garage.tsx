@@ -45,7 +45,7 @@ const MIN_CHAMFER_DIM = 0.05
  * `segments: 1` gives three quads per face axis — one flat centre and two rounded
  * shoulders. That is the cheapest form that still produces the highlight.
  */
-function buildGeometry(prop: Prop): BufferGeometry {
+export function buildGeometry(prop: Prop): BufferGeometry {
   if (prop.kind === 'box') {
     const [w, h, d] = prop.args
     const smallest = Math.min(w, h, d)
@@ -105,9 +105,9 @@ interface MaterialSpec {
  *  gets one. Both are scaled down by the blackout driver below, so they live here
  *  rather than inline in the spec table and the constructor. */
 const LAMP_EMISSIVE = 1.1
-const PROP_ENV_INTENSITY = 0.7
+export const PROP_ENV_INTENSITY = 0.7
 
-const MATERIAL_SPECS: Record<GarageMaterialKey, MaterialSpec> = {
+export const MATERIAL_SPECS: Record<GarageMaterialKey, MaterialSpec> = {
   // Matte colours run lighter than they would under IBL: Lambert gets no
   // environment contribution, so values tuned against a Standard material come
   // out muddy. These are pre-compensated.
@@ -158,7 +158,7 @@ const MATERIAL_SPECS: Record<GarageMaterialKey, MaterialSpec> = {
  *  own colour stays white and does not tint the map a second time. */
 type PlasterMaps = ReturnType<typeof createWallSurfaceMaps>
 
-function createMaterial(spec: MaterialSpec, envMap: Texture | null, plaster?: PlasterMaps): Material {
+export function createMaterial(spec: MaterialSpec, envMap: Texture | null, plaster?: PlasterMaps): Material {
   const { matte, plaster: _plaster, ...params } = spec
   if (matte) {
     const material = new MeshLambertMaterial({
