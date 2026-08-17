@@ -20,6 +20,8 @@ import type { GarageMaterialKey, Prop } from '@/scenes/garage'
 import { GARAGE_WALL } from '@/scenes/palette'
 import { createWallSurfaceMaps } from '@/lib/surfaceTextures'
 import { lightingState } from '@/animations/lightingState'
+import { useSceneStore } from '@/store/useSceneStore'
+import { approach, CEILING_FADE, switchTarget } from './GarageLights'
 import { useEnvironmentMap } from './environmentContext'
 
 /**
@@ -337,11 +339,25 @@ export const Garage = memo(function Garage() {
   // geometry, and every metal prop is lit by the environment map. Leaving either
   // alone gives a blackout with glowing tubes still hanging in it and a chrome
   // tool wall still catching a room that is no longer lit.
+  const ceilingSwitch = useSceneStore((s) => s.lightSwitches.ceiling)
+  // Tracks the same thrown-switch fade as the ceiling fixtures in GarageLights,
+  // so the tube geometry's own glow goes out with the light it is standing in
+  // for rather than only reacting to the scroll-scrubbed atmosphere.
+  const ceilingLevel = useRef(1)
   const applied = useRef(-1)
-  useFrame(() => {
+  useFrame((_state, dt) => {
     const { dim } = lightingState
-    if (dim === applied.current) return
+    const ceilingTarget = switchTarget(ceilingSwitch)
+    if (ceilingTarget !== null) {
+      ceilingLevel.current = approach(ceilingLevel.current, ceilingTarget, dt, CEILING_FADE)
+    } else if (dim === applied.current) {
+      return
+    }
     applied.current = dim
+
+    // Ceiling strips follow the thrown switch when one is thrown; every other
+    // emissive (the door/window glazing) only ever follows the atmosphere dim.
+    const lampDim = ceilingTarget !== null ? 1 - ceilingLevel.current : dim
 
     for (const group of groups) {
       const material = group.material as unknown as {
@@ -352,7 +368,10 @@ export const Garage = memo(function Garage() {
       // with the rest of the building. Read off the spec rather than special
       // casing the lamps, so glazing added later dims without touching this.
       const emissive = MATERIAL_SPECS[group.key].emissiveIntensity
-      if (emissive !== undefined) material.emissiveIntensity = emissive * (1 - 0.94 * dim)
+      if (emissive !== undefined) {
+        const groupDim = group.key === 'lamp' ? lampDim : dim
+        material.emissiveIntensity = emissive * (1 - 0.94 * groupDim)
+      }
       if (material.envMapIntensity !== undefined) {
         material.envMapIntensity = PROP_ENV_INTENSITY * (1 - 0.92 * dim)
       }

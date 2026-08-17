@@ -56,16 +56,16 @@ function level(dim: number, floor: number) {
  * is a quicker halogen-style punch; the car's own lamps are behind a relay and are
  * effectively instant.
  */
-const CEILING_FADE = 0.35
+export const CEILING_FADE = 0.35
 const SPOT_FADE = 0.18
 const LAMP_FADE = 0.08
 
-function approach(current: number, target: number, dt: number, tau: number) {
+export function approach(current: number, target: number, dt: number, tau: number) {
   return current + (target - current) * (1 - Math.exp(-dt / tau))
 }
 
 /** null = follow the scroll-scrubbed atmosphere untouched; 0/1 = a thrown switch. */
-function switchTarget(state: LightSwitchState): number | null {
+export function switchTarget(state: LightSwitchState): number | null {
   if (state === 'off') return 0
   if (state === 'on') return 1
   return null
