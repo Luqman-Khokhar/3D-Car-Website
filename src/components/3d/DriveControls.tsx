@@ -2,7 +2,14 @@ import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { driveState, returnCarHome } from '@/animations/driveState'
 import { garageDoorState } from '@/animations/garageDoorState'
-import { DOOR_OPENING_HALF_WIDTH, DOOR_Z, ROOM_HALF_X, ROOM_HALF_Z, YARD_DEPTH } from '@/scenes/garage'
+import {
+  DOOR_OPENING_HALF_WIDTH,
+  DOOR_Z,
+  OUTSIDE_DEPTH,
+  OUTSIDE_HALF_WIDTH,
+  ROOM_HALF_X,
+  ROOM_HALF_Z,
+} from '@/scenes/garage'
 
 /** Metres/second and radians/second at full lock — tuned for the 4.4 m car. */
 const SPEED = 3.2
@@ -17,16 +24,19 @@ const DOOR_CLEAR_PROGRESS = 0.85
 const CAR_HALF_WIDTH = 1.05
 const CAR_HALF_LENGTH = 2.25
 const WALL_T = 0.24
+/** How far past the door plane the car has to clear before the wall pinch
+ *  opens out into the wide world — roughly the wall's own thickness plus a
+ *  margin, so the widening happens once the car is actually through it. */
+const WALL_CLEAR = 1.0
 
 const ROOM_X_LIMIT = ROOM_HALF_X - WALL_T / 2 - CAR_HALF_WIDTH
 const ROOM_Z_BACK_LIMIT = -ROOM_HALF_Z + WALL_T / 2 + CAR_HALF_LENGTH
 const DOOR_X_LIMIT = DOOR_OPENING_HALF_WIDTH - CAR_HALF_WIDTH
+const OUTSIDE_X_LIMIT = OUTSIDE_HALF_WIDTH - CAR_HALF_WIDTH
+const OUTSIDE_Z_LIMIT = DOOR_Z + OUTSIDE_DEPTH - CAR_HALF_LENGTH
 /** Trigger line for the doorway channel: the car's nose reaching the door
- *  plane. Past this the car must fit through the opening (or be in the yard). */
+ *  plane. Past this it has to fit through the opening. */
 const DOORWAY_Z = DOOR_Z - CAR_HALF_LENGTH
-const YARD_Z_LIMIT = DOOR_Z + YARD_DEPTH - CAR_HALF_LENGTH
-
-const clamp = (v: number, min: number, max: number) => (v < min ? min : v > max ? max : v)
 
 const DRIVE_KEYS = new Set([
   'ArrowUp',
@@ -44,13 +54,31 @@ const DRIVE_KEYS = new Set([
 ])
 
 /**
+ * Three concentric zones, widest to narrowest to widest again: the garage
+ * interior, the wall pinch at the doorway (only passable, and only as wide as
+ * the opening, once the door is clear), and the open world beyond it.
+ *
+ * Used to reject a proposed step rather than clamp it — clamping x directly
+ * at the zone boundary would snap the car sideways the instant it crossed
+ * back from the wide outside zone into the narrow doorway one.
+ */
+function inBounds(x: number, z: number, doorClear: boolean): boolean {
+  if (z <= DOORWAY_Z) return Math.abs(x) <= ROOM_X_LIMIT && z >= ROOM_Z_BACK_LIMIT
+  if (z <= DOOR_Z + WALL_CLEAR) return doorClear && Math.abs(x) <= DOOR_X_LIMIT
+  return Math.abs(x) <= OUTSIDE_X_LIMIT && z <= OUTSIDE_Z_LIMIT
+}
+
+/**
  * Arrow-key / WASD driving, mounted only while free look is on — the same
  * reachability rule as DoorButton, since free look is already the mode that
  * hands pointer and keyboard control to the user.
  *
  * The car can never pass the front wall unless the sectional door is open and
- * it is lined up with the opening: the clamp in useFrame below enforces that
- * every frame, regardless of which keys are held.
+ * it is lined up with the opening: `inBounds` enforces that every frame,
+ * regardless of which keys are held. A step that would leave bounds is
+ * resolved axis-by-axis instead of just being dropped, so the car slides
+ * along whatever it bumped into rather than stopping dead the moment either
+ * component alone would be invalid.
  */
 export function DriveControls() {
   const held = useRef<Set<string>>(new Set())
@@ -92,19 +120,21 @@ export function DriveControls() {
 
     // Steering only bites while rolling, same as a real car.
     if (forward !== 0) driveState.yaw += turn * TURN_RATE * delta * Math.sign(forward)
-    driveState.x += Math.sin(driveState.yaw) * forward * SPEED * delta
-    driveState.z += Math.cos(driveState.yaw) * forward * SPEED * delta
 
+    const dx = Math.sin(driveState.yaw) * forward * SPEED * delta
+    const dz = Math.cos(driveState.yaw) * forward * SPEED * delta
     const doorClear = garageDoorState.progress >= DOOR_CLEAR_PROGRESS
-    if (driveState.z > DOORWAY_Z) {
-      // In the doorway channel or the yard beyond it — width is the opening's,
-      // the whole way through.
-      driveState.x = clamp(driveState.x, -DOOR_X_LIMIT, DOOR_X_LIMIT)
-      driveState.z = doorClear ? Math.min(driveState.z, YARD_Z_LIMIT) : DOORWAY_Z
-    } else {
-      driveState.x = clamp(driveState.x, -ROOM_X_LIMIT, ROOM_X_LIMIT)
+
+    const nx = driveState.x + dx
+    const nz = driveState.z + dz
+    if (inBounds(nx, nz, doorClear)) {
+      driveState.x = nx
+      driveState.z = nz
+    } else if (inBounds(nx, driveState.z, doorClear)) {
+      driveState.x = nx
+    } else if (inBounds(driveState.x, nz, doorClear)) {
+      driveState.z = nz
     }
-    driveState.z = Math.max(driveState.z, ROOM_Z_BACK_LIMIT)
   })
 
   return null

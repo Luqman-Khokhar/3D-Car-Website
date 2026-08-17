@@ -75,10 +75,16 @@ const FRONT = ROOM_HALF_Z - WALL_T / 2
 export const DOOR_OPENING_HALF_WIDTH = 2.6
 const DOOR_OPENING_HEIGHT = 3.62
 
-/** Depth of the plain white yard beyond the sectional door — the arrow-key
- *  drive-out area. Width matches DOOR_OPENING_HALF_WIDTH so the car is never
- *  clamped somewhere no wall exists for. See DriveControls.tsx / OutsideYard.tsx. */
-export const YARD_DEPTH = 6
+/**
+ * Open white world beyond the sectional door — the arrow-key drive-out area.
+ * Widens well past the opening once the car actually clears the wall (see
+ * DriveControls.tsx), and is deep enough that its far edge sits past FOG_FAR:
+ * the ground doesn't need to visibly end, because everything past ~44 m
+ * already dissolves into the fog colour, which SceneCanvas's NightPass turns
+ * white once the car is outside. See DriveControls.tsx / OutsideWorld.tsx.
+ */
+export const OUTSIDE_HALF_WIDTH = 30
+export const OUTSIDE_DEPTH = 50
 
 const box = (
   args: [number, number, number],

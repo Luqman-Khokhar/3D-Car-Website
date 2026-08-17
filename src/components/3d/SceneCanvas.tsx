@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useMemo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows } from '@react-three/drei'
 import { ACESFilmicToneMapping, Color, NoToneMapping } from 'three'
@@ -11,13 +11,21 @@ import { GarageLights } from './GarageLights'
 import { CameraRig } from './CameraRig'
 import { FreeLookControls } from './FreeLookControls'
 import { DriveControls } from './DriveControls'
+import { DriveCamera } from './DriveCamera'
 import { GarageEnvironment } from './GarageEnvironment'
 import { PostFX } from './PostFX'
 import { DebugBridge } from './DebugBridge'
 import { debugEnabled } from '@/lib/debug'
 import { roomDim } from '@/animations/lightingState'
+import { driveState } from '@/animations/driveState'
+import { DOOR_Z } from '@/scenes/garage'
 import { GARAGE_WALL, FOG_NEAR, FOG_FAR, NIGHT_AIR } from '@/scenes/palette'
 import { useSceneStore } from '@/store/useSceneStore'
+
+/** Depth past the door plane over which the world fades to white as the car
+ *  drives out — see NightPass. Short enough that the whiteout reads as the
+ *  car passing through the doorway, not a lingering cross-fade. */
+const OUTSIDE_FADE_DEPTH = 4
 
 /** Retina is enough; 3x DPR on a phone quadruples fill cost for no visible gain. */
 const DPR: [number, number] = [1, 2]
@@ -44,31 +52,37 @@ function ToneMappingPolicy({ managed }: { managed: boolean }) {
 
 /**
  * Carries the background and the fog from lit garage air to night air across the
- * two lighting scenes.
+ * two lighting scenes, and — on top of that — to plain white once the car is
+ * driven out through the sectional door.
  *
- * Both have to move, and together. The background is the far wall in every
+ * All three have to move together. The background is the far wall in every
  * direction the room does not cover, and the fog is what the far end of the floor
  * dissolves into — dimming the lights while either stays at daylight value leaves
  * the car in a dark room punched out of a bright sky, which reads as a rendering
- * bug rather than as darkness.
+ * bug rather than as darkness. Same reasoning for the outside whiteout: it has to
+ * take over the fog too, or the drive-out world dissolves into whatever the
+ * garage's own atmosphere happened to be instead of an open white world.
  *
- * Only touches three when the room's darkness actually changes — the
- * scroll-scrubbed `dim` for 2 of the 11 scenes, or a thrown wall switch at any
- * point in free look. See `roomDim` in animations/lightingState.ts.
+ * Runs every frame rather than only on change (the old dim-only version's
+ * `applied` cache) because the outside blend now moves continuously with the
+ * car's position while driving — the colour math itself is cheap enough that
+ * gating it isn't worth the extra state.
  */
 function NightPass() {
   const scene = useThree((s) => s.scene)
-  const applied = useRef(-1)
   const lit = useMemo(() => new Color(GARAGE_WALL), [])
   const night = useMemo(() => new Color(NIGHT_AIR), [])
+  const white = useMemo(() => new Color('#ffffff'), [])
+  const base = useMemo(() => new Color(), [])
+  const final = useMemo(() => new Color(), [])
 
   useFrame(() => {
-    const dim = roomDim.value
-    if (dim === applied.current) return
-    applied.current = dim
+    base.lerpColors(lit, night, roomDim.value)
+    const outsideT = Math.min(Math.max((driveState.z - DOOR_Z) / OUTSIDE_FADE_DEPTH, 0), 1)
+    final.lerpColors(base, white, outsideT)
 
-    if (scene.background instanceof Color) scene.background.lerpColors(lit, night, dim)
-    if (scene.fog) scene.fog.color.lerpColors(lit, night, dim)
+    if (scene.background instanceof Color) scene.background.copy(final)
+    if (scene.fog) scene.fog.color.copy(final)
   })
 
   return null
@@ -130,10 +144,13 @@ export function SceneCanvas() {
           )}
           <CarModel />
           <CameraRig />
-          {/* Mounted only in free look so exactly one system writes the camera. */}
-          {freeLook && <FreeLookControls />}
-          {/* Arrow-key driving, same reachability rule as the door button. */}
+          {/* Arrow-key driving, same reachability rule as the door button. Ordered
+              first so DriveCamera reads this frame's car position, not last frame's. */}
           {freeLook && <DriveControls />}
+          {/* Free-look orbit and the drive chase camera trade the view back and
+              forth via isCarAway() — see FreeLookControls' `away` check. */}
+          {freeLook && <FreeLookControls />}
+          {freeLook && <DriveCamera />}
           {debugEnabled() && <DebugBridge />}
           {!lowPower && <PostFX />}
           </GarageEnvironment>

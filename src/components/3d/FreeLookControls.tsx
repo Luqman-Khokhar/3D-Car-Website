@@ -2,6 +2,7 @@ import { useEffect, useRef, type ComponentRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { cameraState } from '@/animations/cameraPath'
+import { isCarAway } from '@/animations/driveState'
 import { ROOM_HALF_X, ROOM_HALF_Z } from '@/scenes/garage'
 
 /** Keeps the near plane off the wall geometry rather than flush against it. */
@@ -52,6 +53,13 @@ export function FreeLookControls() {
   useFrame(() => {
     const c = controls.current
     if (!c) return
+
+    // DriveCamera takes the wheel while the car is out near the door — see
+    // isCarAway(). Disabling rather than unmounting keeps the orbit's target
+    // and damping state intact for when control hands back.
+    const away = isCarAway()
+    c.enabled = !away
+    if (away) return
 
     c.target.x = clamp(c.target.x, -TARGET_HALF_X, TARGET_HALF_X)
     c.target.y = clamp(c.target.y, TARGET_MIN_Y, TARGET_MAX_Y)
