@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Object3D } from 'three'
 import type { AmbientLight, DirectionalLight, HemisphereLight, PointLight, RectAreaLight, SpotLight } from 'three'
-import { lightingState } from '@/animations/lightingState'
+import { lightingState, roomDim } from '@/animations/lightingState'
 import { GARAGE_WALL, GARAGE_FLOOR } from '@/scenes/palette'
 import { ROOM_HEIGHT } from '@/scenes/garage'
 import { useSceneStore } from '@/store/useSceneStore'
@@ -155,9 +155,16 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     const fixture = anyTubeThrown ? tubeAvg : fixtureAuto
     const fill = anyTubeThrown ? tubeAvg : fillAuto
 
+    // Background/fog have to darken in step with the room, same reasoning as
+    // NightPass's own comment: a switch that blacks out the fixtures but leaves
+    // the wall at daylight colour reads as a rendering bug, not a dark garage.
+    roomDim.value = anyTubeThrown ? 1 - tubeAvg : dim
+
     if (hemisphere.current) hemisphere.current.intensity = BASE.hemisphere * fill
     if (ambient.current) ambient.current.intensity = BASE.ambient * fill
-    if (spot.current) spot.current.intensity = BASE.spot * fixtureAuto
+    // Was fixtureAuto (scroll-only) — the gantry lamp sat at full brightness
+    // through a manual blackout while every other fixture obeyed the switches.
+    if (spot.current) spot.current.intensity = BASE.spot * fixture
     if (bounce.current) bounce.current.intensity = BASE.bounce * fixture
     if (doorFill.current) doorFill.current.intensity = BASE.doorFill * fixture
     if (ceilingBounce.current) ceilingBounce.current.intensity = BASE.ceilingBounce * fixture

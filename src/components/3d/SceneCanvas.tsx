@@ -14,7 +14,7 @@ import { GarageEnvironment } from './GarageEnvironment'
 import { PostFX } from './PostFX'
 import { DebugBridge } from './DebugBridge'
 import { debugEnabled } from '@/lib/debug'
-import { lightingState } from '@/animations/lightingState'
+import { roomDim } from '@/animations/lightingState'
 import { GARAGE_WALL, FOG_NEAR, FOG_FAR, NIGHT_AIR } from '@/scenes/palette'
 import { useSceneStore } from '@/store/useSceneStore'
 
@@ -51,7 +51,9 @@ function ToneMappingPolicy({ managed }: { managed: boolean }) {
  * the car in a dark room punched out of a bright sky, which reads as a rendering
  * bug rather than as darkness.
  *
- * Only touches three when `dim` actually changes, which is 2 of the 11 scenes.
+ * Only touches three when the room's darkness actually changes — the
+ * scroll-scrubbed `dim` for 2 of the 11 scenes, or a thrown wall switch at any
+ * point in free look. See `roomDim` in animations/lightingState.ts.
  */
 function NightPass() {
   const scene = useThree((s) => s.scene)
@@ -60,7 +62,7 @@ function NightPass() {
   const night = useMemo(() => new Color(NIGHT_AIR), [])
 
   useFrame(() => {
-    const { dim } = lightingState
+    const dim = roomDim.value
     if (dim === applied.current) return
     applied.current = dim
 

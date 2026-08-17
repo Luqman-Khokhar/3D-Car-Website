@@ -33,6 +33,16 @@ export const lightingState: LightingState = {
   frontGlow: 0,
 }
 
+/**
+ * Darkness the room actually renders with, as opposed to `dim`'s scroll-scrubbed
+ * value alone. Mirrors `dim` unless a wall switch is thrown, in which case the
+ * switch wins outright — same override rule GarageLights already applies to the
+ * ceiling strips. Written once per frame by GarageLights, the only place that
+ * knows both the scroll value and the switch state; read by NightPass so the
+ * background/fog colour never disagrees with a room the switches put dark.
+ */
+export const roomDim = { value: 0 }
+
 export function resetLightingState() {
   lightingState.dim = 0
   lightingState.rearGlow = 0
