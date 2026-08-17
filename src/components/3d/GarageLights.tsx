@@ -58,14 +58,10 @@ function level(dim: number, floor: number) {
 
 /**
  * Time constant (seconds) each switched circuit takes to reach a thrown switch's
- * target, as an exponential approach rather than a snap. Ceiling fluorescents are
- * the slowest — a tube visibly ramps rather than popping to full output; the spot
- * is a quicker halogen-style punch; the car's own lamps are behind a relay and are
- * effectively instant.
+ * target, as an exponential approach rather than a snap — a tube visibly ramps
+ * rather than popping to full output.
  */
 export const CEILING_FADE = 0.35
-const SPOT_FADE = 0.18
-const LAMP_FADE = 0.08
 
 export function approach(current: number, target: number, dt: number, tau: number) {
   return current + (target - current) * (1 - Math.exp(-dt / tau))
@@ -98,8 +94,6 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
   const tubeBackSwitch = useSceneStore((s) => s.lightSwitches.tubeBack)
   const tubeMidSwitch = useSceneStore((s) => s.lightSwitches.tubeMid)
   const tubeFrontSwitch = useSceneStore((s) => s.lightSwitches.tubeFront)
-  const spotSwitch = useSceneStore((s) => s.lightSwitches.spot)
-  const headlampSwitch = useSceneStore((s) => s.lightSwitches.headlamps)
 
   // Current position of each switched circuit's exponential approach, 0..1.
   // Seeded at 1 (fully on) to match the hero scene's baseline so a stored 'off'
@@ -107,8 +101,6 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
   const backLevel = useRef(1)
   const midLevel = useRef(1)
   const frontLevel = useRef(1)
-  const spotLevel = useRef(1)
-  const lampLevel = useRef(1)
 
   const hemisphere = useRef<HemisphereLight>(null)
   const ambient = useRef<AmbientLight>(null)
@@ -145,20 +137,15 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     const backTarget = switchTarget(tubeBackSwitch)
     const midTarget = switchTarget(tubeMidSwitch)
     const frontTarget = switchTarget(tubeFrontSwitch)
-    const spotTarget = switchTarget(spotSwitch)
-    const lampTarget = switchTarget(headlampSwitch)
 
     if (backTarget !== null) backLevel.current = approach(backLevel.current, backTarget, dt, CEILING_FADE)
     if (midTarget !== null) midLevel.current = approach(midLevel.current, midTarget, dt, CEILING_FADE)
     if (frontTarget !== null) frontLevel.current = approach(frontLevel.current, frontTarget, dt, CEILING_FADE)
-    if (spotTarget !== null) spotLevel.current = approach(spotLevel.current, spotTarget, dt, SPOT_FADE)
-    if (lampTarget !== null) lampLevel.current = approach(lampLevel.current, lampTarget, dt, LAMP_FADE)
 
     // Each row lights its own pair of strips independently...
     const backFixture = backTarget !== null ? backLevel.current : fixtureAuto
     const midFixture = midTarget !== null ? midLevel.current : fixtureAuto
     const frontFixture = frontTarget !== null ? frontLevel.current : fixtureAuto
-    const spotFixture = spotTarget !== null ? spotLevel.current : fixtureAuto
 
     // ...but the room's general ambience (hemisphere/ambient/bounce/fill) isn't
     // tied to any one row, so it tracks the average of whichever rows are
@@ -170,7 +157,7 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
 
     if (hemisphere.current) hemisphere.current.intensity = BASE.hemisphere * fill
     if (ambient.current) ambient.current.intensity = BASE.ambient * fill
-    if (spot.current) spot.current.intensity = BASE.spot * spotFixture
+    if (spot.current) spot.current.intensity = BASE.spot * fixtureAuto
     if (bounce.current) bounce.current.intensity = BASE.bounce * fixture
     if (doorFill.current) doorFill.current.intensity = BASE.doorFill * fixture
     if (ceilingBounce.current) ceilingBounce.current.intensity = BASE.ceilingBounce * fixture
@@ -185,13 +172,11 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     // and everything in a dark one, so the drive is the glow channel scaled by how
     // dark it has got. Without the `dim` term the beams wash out the garage during
     // the scenes either side, where the lamps are installed but the lights are on.
-    // A thrown headlamp switch replaces that whole drive with the eased switch
-    // level instead, same as a driver flicking the lamps on outside their scene.
-    const beam = lampTarget !== null ? BEAM_INTENSITY * lampLevel.current : BEAM_INTENSITY * frontGlow * dim
+    const beam = BEAM_INTENSITY * frontGlow * dim
     if (beamL.current) beamL.current.intensity = beam
     if (beamR.current) beamR.current.intensity = beam
 
-    const wash = lampTarget !== null ? TAIL_WASH_INTENSITY * lampLevel.current : TAIL_WASH_INTENSITY * rearGlow * dim
+    const wash = TAIL_WASH_INTENSITY * rearGlow * dim
     if (tailL.current) tailL.current.intensity = wash
     if (tailR.current) tailR.current.intensity = wash
   })

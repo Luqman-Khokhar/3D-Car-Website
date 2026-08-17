@@ -15,8 +15,6 @@ const ON_COLOR: Record<LightSwitchGroup, string> = {
   tubeBack: '#fff4de',
   tubeMid: '#fff4de',
   tubeFront: '#fff4de',
-  spot: '#dce8ff',
-  headlamps: '#ff2a18',
 }
 const OFF_COLOR = '#141414'
 

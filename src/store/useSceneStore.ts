@@ -61,8 +61,10 @@ export type LightSwitchState = 'auto' | 'on' | 'off'
 
 /** Ceiling tubes are three independent rows (back/mid/front, matching the
  *  physical rows in ceilingLights() in src/scenes/garage.ts) rather than one
- *  circuit, so each row's pair of tubes can be switched on its own. */
-export const LIGHT_SWITCH_GROUPS = ['tubeBack', 'tubeMid', 'tubeFront', 'spot', 'headlamps'] as const
+ *  circuit, so each row's pair of tubes can be switched on its own. The
+ *  overhead work spot and the car's headlamps stay scroll-driven only — no
+ *  manual switch for either. */
+export const LIGHT_SWITCH_GROUPS = ['tubeBack', 'tubeMid', 'tubeFront'] as const
 export type LightSwitchGroup = (typeof LIGHT_SWITCH_GROUPS)[number]
 
 const LIGHT_SWITCH_KEY = 'car-assembly:light-switches'
@@ -70,8 +72,6 @@ const DEFAULT_LIGHT_SWITCHES: Record<LightSwitchGroup, LightSwitchState> = {
   tubeBack: 'auto',
   tubeMid: 'auto',
   tubeFront: 'auto',
-  spot: 'auto',
-  headlamps: 'auto',
 }
 
 /** Click order: two faces only. `auto` is the hidden resting state before the
