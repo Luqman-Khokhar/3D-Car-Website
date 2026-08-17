@@ -15,16 +15,28 @@ export interface DriveState {
    *  recomputed per frame because DriveCamera reads it too — the chase distance
    *  opens up with speed. Negative is reverse. */
   speed: number
+  /** Steering input, -1 (full left) to 1 (full right). Held here rather than kept
+   *  private to DriveControls because WheelMotion needs it to point the front
+   *  wheels — the body's yaw alone cannot say which way the wheels are turned. */
+  steer: number
   /** Set on exiting free look; ProceduralCar eases the car back to the garage
    *  origin instead of leaving it stranded outside for the scripted camera. */
   returning: boolean
 }
 
-export const driveState: DriveState = { x: 0, z: 0, yaw: 0, speed: 0, returning: false }
+export const driveState: DriveState = {
+  x: 0,
+  z: 0,
+  yaw: 0,
+  speed: 0,
+  steer: 0,
+  returning: false,
+}
 
 export function returnCarHome() {
   driveState.returning = true
   driveState.speed = 0
+  driveState.steer = 0
 }
 
 /** z past which DriveCamera takes over from free-look orbit — a few metres

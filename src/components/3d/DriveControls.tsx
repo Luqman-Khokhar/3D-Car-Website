@@ -194,6 +194,12 @@ export function DriveControls() {
     const turn =
       (keys.has('ArrowLeft') || keys.has('a') || keys.has('A') ? 1 : 0) -
       (keys.has('ArrowRight') || keys.has('d') || keys.has('D') ? 1 : 0)
+    // Published even on an early return below, so the front wheels centre
+    // themselves the moment the key is released rather than staying cranked over
+    // for as long as the car happens to be stationary. Left is +1 here and yaw
+    // grows counter-clockwise, which is the same sign the wheels want.
+    driveState.steer = turn
+
     if (throttle === 0 && turn === 0 && driveState.speed === 0) return
 
     // Integrated in SUBSTEP slices, because `inBounds` only tests the endpoint of

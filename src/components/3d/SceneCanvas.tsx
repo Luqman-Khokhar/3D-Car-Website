@@ -13,6 +13,7 @@ import { CameraRig } from './CameraRig'
 import { FreeLookControls } from './FreeLookControls'
 import { DriveControls } from './DriveControls'
 import { DriveCamera } from './DriveCamera'
+import { WheelMotion } from './WheelMotion'
 import { GarageEnvironment } from './GarageEnvironment'
 import { PostFX } from './PostFX'
 import { DebugBridge } from './DebugBridge'
@@ -220,6 +221,10 @@ export function SceneCanvas() {
           {/* Arrow-key driving, same reachability rule as the door button. Ordered
               first so DriveCamera reads this frame's car position, not last frame's. */}
           {freeLook && <DriveControls />}
+          {/* Wheels roll and steer off the same state. Mounted here rather than
+              inside ProceduralCar because it borrows rotation.x from the assembly
+              timeline and has to hand it back — see WheelMotion. */}
+          {freeLook && <WheelMotion />}
           {/* Free-look orbit and the drive chase camera trade the view back and
               forth via isCarAway() — see FreeLookControls' `away` check. */}
           {freeLook && <FreeLookControls />}
