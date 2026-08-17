@@ -76,10 +76,12 @@ export function FreeLookControls() {
       // sightline the room affords once the wall margin is applied.
       minDistance={1.6}
       maxDistance={11}
-      // Stop just short of both poles: straight down looks at nothing but floor,
-      // and crossing the horizon puts the eye underground.
-      minPolarAngle={0.12}
-      maxPolarAngle={1.52}
+      // Stop just short of both poles — true 0/pi is a degenerate look-at with
+      // no meaningful up vector. Eye-height clamp above (MIN_EYE_Y/MAX_EYE_Y)
+      // is what actually stops the camera going through floor or ceiling, so
+      // this can sit close to the poles without fighting that clamp.
+      minPolarAngle={0.03}
+      maxPolarAngle={Math.PI - 0.03}
       // Pan along the floor rather than the screen plane, so dragging walks
       // through the garage instead of sliding the whole scene.
       screenSpacePanning={false}
