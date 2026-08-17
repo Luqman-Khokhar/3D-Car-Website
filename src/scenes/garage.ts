@@ -76,15 +76,17 @@ export const DOOR_OPENING_HALF_WIDTH = 2.6
 const DOOR_OPENING_HEIGHT = 3.62
 
 /**
- * Open white world beyond the sectional door — the arrow-key drive-out area.
- * Widens well past the opening once the car actually clears the wall (see
- * DriveControls.tsx), and is deep enough that its far edge sits past FOG_FAR:
- * the ground doesn't need to visibly end, because everything past ~44 m
- * already dissolves into the fog colour, which SceneCanvas's NightPass turns
- * white once the car is outside. See DriveControls.tsx / OutsideWorld.tsx.
+ * Ground the world sits on outside the garage slab, which the circuit is laid on.
+ *
+ * Sized purely so no edge of it is ever reachable by sight, not by driving: the
+ * drivable area is fenced by DRIVE_HALF_X / DRIVE_MAX_Z in src/scenes/track.ts,
+ * which is far tighter. Everything past OUTSIDE_FOG_FAR already dissolves into
+ * the haze colour SceneCanvas's NightPass fades to once the car is outside, and
+ * two triangles cost nothing, so this is generous rather than snug — the old
+ * 30 x 50 m version put a visible horizon edge behind the back straight.
+ * See DriveControls.tsx / OutsideWorld.tsx.
  */
-export const OUTSIDE_HALF_WIDTH = 30
-export const OUTSIDE_DEPTH = 50
+export const OUTSIDE_EXTENT = 600
 
 const box = (
   args: [number, number, number],

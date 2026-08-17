@@ -2,18 +2,41 @@ import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { driveState, returnCarHome } from '@/animations/driveState'
 import { garageDoorState } from '@/animations/garageDoorState'
-import {
-  DOOR_OPENING_HALF_WIDTH,
-  DOOR_Z,
-  OUTSIDE_DEPTH,
-  OUTSIDE_HALF_WIDTH,
-  ROOM_HALF_X,
-  ROOM_HALF_Z,
-} from '@/scenes/garage'
+import { DOOR_OPENING_HALF_WIDTH, DOOR_Z, ROOM_HALF_X, ROOM_HALF_Z } from '@/scenes/garage'
+import { DRIVE_HALF_X, DRIVE_MAX_Z } from '@/scenes/track'
 
-/** Metres/second and radians/second at full lock — tuned for the 4.4 m car. */
-const SPEED = 3.2
-const TURN_RATE = 1.6
+/**
+ * Throttle model rather than the old constant 3.2 m/s: a lap of the circuit is
+ * ~200 m, which at a fixed walking pace is a minute of holding a key down. Speed
+ * now builds and carries, so the lobes are taken fast and the pinches have to be
+ * braked for.
+ *
+ * All metres and seconds, tuned for the 4.4 m car.
+ */
+const MAX_SPEED = 10
+const MAX_REVERSE = 4
+const ACCEL = 7
+/** Braking is deliberately stronger than acceleration — a car that cannot slow
+ *  faster than it speeds up feels like a boat at the pinch. */
+const BRAKE = 13
+/** Coasting decay, as the fraction of speed shed per second with no key held. */
+const COAST = 1.8
+/** Ceiling on yaw rate, so low-speed manoeuvring in the garage stays controllable. */
+const TURN_RATE = 1.7
+/** Tightest circle the car will hold. Real steering geometry in one constant:
+ *  yaw rate is speed / radius, so the car understeers at speed instead of
+ *  pivoting on the spot at 10 m/s. Must stay under the circuit's ~9 m curvature
+ *  at the pinch or that corner is not takeable. */
+const MIN_TURN_RADIUS = 4.5
+
+/** Longest integration slice. At MAX_SPEED this is a 25 cm step, an order of
+ *  magnitude shorter than the ~3 m doorway channel `inBounds` tests for, so no
+ *  step can straddle the front wall's zone entirely. */
+const SUBSTEP = 0.025
+/** Most simulated time a single frame may make up. */
+const MAX_FRAME = 0.25
+
+const TWO_PI = Math.PI * 2
 /** Door progress needed before the opening counts as clear — short of 1 so the
  *  car can nose out as soon as the leaf is out of the way, not only once it is
  *  fully stowed against the ceiling. */
@@ -32,8 +55,11 @@ const WALL_CLEAR = 1.0
 const ROOM_X_LIMIT = ROOM_HALF_X - WALL_T / 2 - CAR_HALF_WIDTH
 const ROOM_Z_BACK_LIMIT = -ROOM_HALF_Z + WALL_T / 2 + CAR_HALF_LENGTH
 const DOOR_X_LIMIT = DOOR_OPENING_HALF_WIDTH - CAR_HALF_WIDTH
-const OUTSIDE_X_LIMIT = OUTSIDE_HALF_WIDTH - CAR_HALF_WIDTH
-const OUTSIDE_Z_LIMIT = DOOR_Z + OUTSIDE_DEPTH - CAR_HALF_LENGTH
+/** The outside fence follows the circuit's own footprint plus its run-off, not
+ *  the ground plane — the plane is huge so its edge is never in shot, and driving
+ *  out to it would strand the car in empty fog. */
+const OUTSIDE_X_LIMIT = DRIVE_HALF_X - CAR_HALF_WIDTH
+const OUTSIDE_Z_LIMIT = DRIVE_MAX_Z - CAR_HALF_LENGTH
 /** Trigger line for the doorway channel: the car's nose reaching the door
  *  plane. Past this it has to fit through the opening. */
 const DOORWAY_Z = DOOR_Z - CAR_HALF_LENGTH
@@ -107,22 +133,38 @@ export function DriveControls() {
     }
   }, [])
 
-  useFrame((_, delta) => {
-    if (driveState.returning) return
-    const keys = held.current
-    const forward =
-      (keys.has('ArrowUp') || keys.has('w') || keys.has('W') ? 1 : 0) -
-      (keys.has('ArrowDown') || keys.has('s') || keys.has('S') ? 1 : 0)
-    const turn =
-      (keys.has('ArrowLeft') || keys.has('a') || keys.has('A') ? 1 : 0) -
-      (keys.has('ArrowRight') || keys.has('d') || keys.has('D') ? 1 : 0)
-    if (forward === 0 && turn === 0) return
+  /** One integration step of at most SUBSTEP seconds. */
+  const advance = (dt: number, throttle: number, turn: number) => {
+    let speed = driveState.speed
+    if (throttle > 0) {
+      // Down is a brake first and reverse second, so the same key stops the car
+      // before it backs up — pressing it at 10 m/s should not shove the car
+      // straight into reverse.
+      speed += (speed < 0 ? BRAKE : ACCEL) * dt
+    } else if (throttle < 0) {
+      speed -= (speed > 0 ? BRAKE : ACCEL) * dt
+    } else {
+      speed -= speed * Math.min(COAST * dt, 1)
+      if (Math.abs(speed) < 0.05) speed = 0
+    }
+    driveState.speed = Math.min(Math.max(speed, -MAX_REVERSE), MAX_SPEED)
 
-    // Steering only bites while rolling, same as a real car.
-    if (forward !== 0) driveState.yaw += turn * TURN_RATE * delta * Math.sign(forward)
+    if (driveState.speed === 0) return
 
-    const dx = Math.sin(driveState.yaw) * forward * SPEED * delta
-    const dz = Math.cos(driveState.yaw) * forward * SPEED * delta
+    // Steering only bites while rolling, same as a real car, and the circle it
+    // can hold is bounded by MIN_TURN_RADIUS rather than by yaw rate alone.
+    if (turn !== 0) {
+      const rate = Math.min(Math.abs(driveState.speed) / MIN_TURN_RADIUS, TURN_RATE)
+      driveState.yaw += turn * rate * dt * Math.sign(driveState.speed)
+      // Wrapped, or a long stint of holding one direction walks yaw out to tens
+      // of radians and the ease back to 0 on exit spins the car several times.
+      if (driveState.yaw > Math.PI) driveState.yaw -= TWO_PI
+      else if (driveState.yaw < -Math.PI) driveState.yaw += TWO_PI
+    }
+
+    const step = driveState.speed * dt
+    const dx = Math.sin(driveState.yaw) * step
+    const dz = Math.cos(driveState.yaw) * step
     const doorClear = garageDoorState.progress >= DOOR_CLEAR_PROGRESS
 
     const nx = driveState.x + dx
@@ -132,8 +174,41 @@ export function DriveControls() {
       driveState.z = nz
     } else if (inBounds(nx, driveState.z, doorClear)) {
       driveState.x = nx
+      // Scrubbing off speed on a graze, rather than only on a dead stop, keeps
+      // the car from sliding the full length of a wall at 10 m/s.
+      driveState.speed *= 0.6
     } else if (inBounds(driveState.x, nz, doorClear)) {
       driveState.z = nz
+      driveState.speed *= 0.6
+    } else {
+      driveState.speed = 0
+    }
+  }
+
+  useFrame((_, delta) => {
+    if (driveState.returning) return
+    const keys = held.current
+    const throttle =
+      (keys.has('ArrowUp') || keys.has('w') || keys.has('W') ? 1 : 0) -
+      (keys.has('ArrowDown') || keys.has('s') || keys.has('S') ? 1 : 0)
+    const turn =
+      (keys.has('ArrowLeft') || keys.has('a') || keys.has('A') ? 1 : 0) -
+      (keys.has('ArrowRight') || keys.has('d') || keys.has('D') ? 1 : 0)
+    if (throttle === 0 && turn === 0 && driveState.speed === 0) return
+
+    // Integrated in SUBSTEP slices, because `inBounds` only tests the endpoint of
+    // a step: one long frame at 10 m/s is a step several metres long, and a step
+    // longer than the wall is thick lands past it and reads as in bounds. That is
+    // not hypothetical — a backgrounded tab or a first frame on a slow GPU hands
+    // useFrame multi-second deltas, and the car drove clean through the closed
+    // front wall onto the circuit. MAX_FRAME then caps how much of such a stall
+    // is made up at all; the rest is dropped, so a hitch costs distance rather
+    // than launching the car across the map.
+    let remaining = Math.min(delta, MAX_FRAME)
+    while (remaining > 0) {
+      const dt = Math.min(remaining, SUBSTEP)
+      advance(dt, throttle, turn)
+      remaining -= dt
     }
   })
 

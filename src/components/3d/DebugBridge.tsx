@@ -5,6 +5,9 @@ import { cameraState } from '@/animations/cameraPath'
 import type { CameraKey } from '@/animations/cameraPath'
 import { garageDoorState } from '@/animations/garageDoorState'
 import type { GarageDoorState } from '@/animations/garageDoorState'
+import { driveState } from '@/animations/driveState'
+import type { DriveState } from '@/animations/driveState'
+import { useSceneStore } from '@/store/useSceneStore'
 
 export interface SceneDebugHandle {
   scene: Scene
@@ -18,6 +21,13 @@ export interface SceneDebugHandle {
   /** Live door state. Flip `.open` to drive the sectional door without the
    *  in-scene button — GarageDoor.tsx eases toward it either way. */
   garageDoorState: GarageDoorState
+  /** Live drive state. Write `.x`/`.z`/`.yaw` to teleport the car anywhere on
+   *  the circuit without holding a key down — the fastest way to check a corner
+   *  or the chase framing from a screenshot. Needs free look on for the drive
+   *  camera to be mounted at all. */
+  driveState: DriveState
+  /** Free look, which is what mounts DriveControls and DriveCamera. */
+  setFreeLook: (value: boolean) => void
 }
 
 declare global {
@@ -36,13 +46,22 @@ export function DebugBridge() {
   const scene = useThree((s) => s.scene)
   const camera = useThree((s) => s.camera)
   const gl = useThree((s) => s.gl)
+  const setFreeLook = useSceneStore((s) => s.setFreeLook)
 
   useEffect(() => {
-    window.__carScene = { scene, camera, gl, cameraState, garageDoorState }
+    window.__carScene = {
+      scene,
+      camera,
+      gl,
+      cameraState,
+      garageDoorState,
+      driveState,
+      setFreeLook,
+    }
     return () => {
       delete window.__carScene
     }
-  }, [scene, camera, gl])
+  }, [scene, camera, gl, setFreeLook])
 
   return null
 }

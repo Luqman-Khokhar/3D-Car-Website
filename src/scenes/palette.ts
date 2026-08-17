@@ -23,6 +23,29 @@ export const FOG_NEAR = 16
 export const FOG_FAR = 44
 
 /**
+ * Outside the sectional door. The circuit itself is white, so the ground it sits
+ * on cannot be — a white track on white ground is invisible. This is the lightest
+ * grey that still lets the tarmac read as a separate surface.
+ */
+export const OUTSIDE_GROUND = '#c5ccd4'
+
+/** Air outside: background and fog once the car is out. A shade lighter than the
+ *  ground so the far end of the circuit dissolves upward into haze rather than
+ *  ending on a horizon line. */
+export const OUTSIDE_AIR = '#e9edf1'
+
+/** Fog range outside. Far has to clear the whole circuit (~80 m from the door) or
+ *  the back straight fades out while the car is still driving toward it. */
+export const OUTSIDE_FOG_NEAR = 50
+export const OUTSIDE_FOG_FAR = 185
+
+/** Racing surface, its kerbs, and the broken lane line. Only three values on
+ *  purpose: the track is a white ribbon with a dark edge, not a painted circuit. */
+export const TRACK_SURFACE = '#ffffff'
+export const TRACK_BORDER = '#3a4048'
+export const TRACK_LINE = '#c2c8d0'
+
+/**
  * What the background and the fog become at full blackout in the head-lamps
  * scene. Deliberately a cold near-black rather than #000: a true black background
  * has no hue for the tone map to work with, so the unlit half of the car lands on

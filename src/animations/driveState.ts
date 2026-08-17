@@ -11,15 +11,20 @@ export interface DriveState {
   z: number
   /** Heading, radians. 0 faces +Z — the car's nose, per CAR_PARTS' contract. */
   yaw: number
+  /** Signed metres/second along the heading. Carried in state rather than
+   *  recomputed per frame because DriveCamera reads it too — the chase distance
+   *  opens up with speed. Negative is reverse. */
+  speed: number
   /** Set on exiting free look; ProceduralCar eases the car back to the garage
    *  origin instead of leaving it stranded outside for the scripted camera. */
   returning: boolean
 }
 
-export const driveState: DriveState = { x: 0, z: 0, yaw: 0, returning: false }
+export const driveState: DriveState = { x: 0, z: 0, yaw: 0, speed: 0, returning: false }
 
 export function returnCarHome() {
   driveState.returning = true
+  driveState.speed = 0
 }
 
 /** z past which DriveCamera takes over from free-look orbit — a few metres

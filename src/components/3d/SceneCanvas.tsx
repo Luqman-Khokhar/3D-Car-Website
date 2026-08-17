@@ -1,7 +1,8 @@
-import { Suspense, useEffect, useMemo } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows } from '@react-three/drei'
 import { ACESFilmicToneMapping, Color, NoToneMapping } from 'three'
+import type { DirectionalLight, Group } from 'three'
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
 import { CarModel } from './CarModel'
 import { GroundPlane } from './GroundPlane'
@@ -19,7 +20,15 @@ import { debugEnabled } from '@/lib/debug'
 import { roomDim } from '@/animations/lightingState'
 import { driveState } from '@/animations/driveState'
 import { DOOR_Z } from '@/scenes/garage'
-import { GARAGE_WALL, FOG_NEAR, FOG_FAR, NIGHT_AIR } from '@/scenes/palette'
+import {
+  GARAGE_WALL,
+  FOG_NEAR,
+  FOG_FAR,
+  NIGHT_AIR,
+  OUTSIDE_AIR,
+  OUTSIDE_FOG_FAR,
+  OUTSIDE_FOG_NEAR,
+} from '@/scenes/palette'
 import { useSceneStore } from '@/store/useSceneStore'
 
 /** Depth past the door plane over which the world fades to white as the car
@@ -72,20 +81,79 @@ function NightPass() {
   const scene = useThree((s) => s.scene)
   const lit = useMemo(() => new Color(GARAGE_WALL), [])
   const night = useMemo(() => new Color(NIGHT_AIR), [])
-  const white = useMemo(() => new Color('#ffffff'), [])
+  const outside = useMemo(() => new Color(OUTSIDE_AIR), [])
   const base = useMemo(() => new Color(), [])
   const final = useMemo(() => new Color(), [])
 
   useFrame(() => {
     base.lerpColors(lit, night, roomDim.value)
-    const outsideT = Math.min(Math.max((driveState.z - DOOR_Z) / OUTSIDE_FADE_DEPTH, 0), 1)
-    final.lerpColors(base, white, outsideT)
+    const outsideT = outsideBlend()
+    final.lerpColors(base, outside, outsideT)
 
     if (scene.background instanceof Color) scene.background.copy(final)
-    if (scene.fog) scene.fog.color.copy(final)
+    if (!scene.fog) return
+    scene.fog.color.copy(final)
+    // The fog range has to open up with the colour, not just its hue: the
+    // garage's 16–44 m range is set for a 19 m room and would swallow the far
+    // side of the circuit ~80 m out while the car is still driving toward it.
+    // Lerped on the same t, so the horizon pushes back as the car noses out
+    // rather than popping the moment it crosses the door plane.
+    if ('near' in scene.fog && 'far' in scene.fog) {
+      scene.fog.near = FOG_NEAR + (OUTSIDE_FOG_NEAR - FOG_NEAR) * outsideT
+      scene.fog.far = FOG_FAR + (OUTSIDE_FOG_FAR - FOG_FAR) * outsideT
+    }
   })
 
   return null
+}
+
+/** How far past the door the car is before the sun is at full strength. Same
+ *  ramp as the air colour, so the light and the haze arrive together. */
+const outsideBlend = () =>
+  Math.min(Math.max((driveState.z - DOOR_Z) / OUTSIDE_FADE_DEPTH, 0), 1)
+
+/** Peak intensity of the drive-out sun. */
+const SUN_INTENSITY = 1.35
+
+/**
+ * Sun for the circuit. Every light in GarageLights is a room fixture at a fixed
+ * point in the garage — the gantry spot and the six ceiling strips fall off long
+ * before the back straight, so a car 60 m out was lit by the hemisphere and two
+ * bounce fills only, and read as a grey paper cut-out on white tarmac.
+ *
+ * Ramped off the car's own position rather than mounted permanently, because the
+ * same light indoors would fight the fixtures it is meant to have nothing to do
+ * with. Deliberately not dimmed by the blackout driver: outside is daylight, the
+ * same reason OutsideWorld and RaceTrack are unlit.
+ *
+ * No shadow map — a second shadow-casting light is the most expensive thing that
+ * could be added here, and the car's grounding outside comes from the contact
+ * shadow following it instead.
+ */
+function OutsideSun() {
+  const light = useRef<DirectionalLight>(null)
+
+  useFrame(() => {
+    if (light.current) light.current.intensity = SUN_INTENSITY * outsideBlend()
+  })
+
+  return <directionalLight ref={light} position={[16, 24, -9]} intensity={0} color="#fff4e4" />
+}
+
+/**
+ * Follows the car with the contact shadow so it stays grounded once it is out on
+ * the circuit. Previously pinned to the origin, which was fine while the car
+ * never left the garage: driven out, the car kept its shadow parked in the empty
+ * garage behind it.
+ */
+function CarShadow({ children }: { children: React.ReactNode }) {
+  const group = useRef<Group>(null)
+
+  useFrame(() => {
+    if (group.current) group.current.position.set(driveState.x, 0, driveState.z)
+  })
+
+  return <group ref={group}>{children}</group>
 }
 
 /**
@@ -108,8 +176,10 @@ export function SceneCanvas() {
         // replaces it. It stays on so the low-power path, which has no chain, is
         // not left with raw jaggies.
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        // Framed for the whole 4.3 m car; CameraRig drives it from here on.
-        camera={{ position: [4.6, 2.1, 6.4], fov: 38, near: 0.1, far: 120 }}
+        // Framed for the whole 4.3 m car; CameraRig drives it from here on. The
+        // far plane has to clear OUTSIDE_FOG_FAR, or the back straight of the
+        // circuit is clipped away instead of fading into haze.
+        camera={{ position: [4.6, 2.1, 6.4], fov: 38, near: 0.1, far: 260 }}
       >
         <color attach="background" args={[GARAGE_WALL]} />
         {/* Dissolves the far floor into the wall. Without it the 60m plane ends on
@@ -129,7 +199,9 @@ export function SceneCanvas() {
               AO only knows about what is on screen, so it cannot darken under a
               car whose underside is facing away from the camera.
               Skipped on low power: this is a full extra depth pass per frame. */}
+          <OutsideSun />
           {!lowPower && (
+            <CarShadow>
             <ContactShadows
               position={[0, 0.012, 0]}
               scale={13}
@@ -141,6 +213,7 @@ export function SceneCanvas() {
               resolution={512}
               color="#1b1f24"
             />
+            </CarShadow>
           )}
           <CarModel />
           <CameraRig />
