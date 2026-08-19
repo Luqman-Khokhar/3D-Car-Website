@@ -4,6 +4,7 @@ import { driveState, returnCarHome } from '@/animations/driveState'
 import { garageDoorState } from '@/animations/garageDoorState'
 import { DOOR_OPENING_HALF_WIDTH, DOOR_Z, ROOM_HALF_X, ROOM_HALF_Z } from '@/scenes/garage'
 import { DRIVE_HALF_X, DRIVE_MAX_Z } from '@/scenes/track'
+import { trackObstacles } from '@/scenes/trackProps'
 
 /**
  * Throttle model rather than the old constant 3.2 m/s: a lap of the circuit is
@@ -91,7 +92,31 @@ const DRIVE_KEYS = new Set([
 function inBounds(x: number, z: number, doorClear: boolean): boolean {
   if (z <= DOORWAY_Z) return Math.abs(x) <= ROOM_X_LIMIT && z >= ROOM_Z_BACK_LIMIT
   if (z <= DOOR_Z + WALL_CLEAR) return doorClear && Math.abs(x) <= DOOR_X_LIMIT
-  return Math.abs(x) <= OUTSIDE_X_LIMIT && z <= OUTSIDE_Z_LIMIT
+  if (Math.abs(x) > OUTSIDE_X_LIMIT || z > OUTSIDE_Z_LIMIT) return false
+  return !hitsProp(x, z)
+}
+
+/** Half the car, treated as one circle. Between its half width (1.05) and half
+ *  length (2.25), because a car that stops a full 2.25 m short of a hoarding it
+ *  is driving straight at reads as an invisible wall. */
+const CAR_RADIUS = 1.25
+
+/**
+ * Circle test against the track furniture. Linear scan — there are on the order
+ * of a hundred circles and this runs once per SUBSTEP, so ~4k distance tests in
+ * the worst frame, which is nothing next to a single draw call. A grid would be
+ * faster and would also have to be kept in step with the props.
+ *
+ * Cones are deliberately absent from the list; see trackProps.ts.
+ */
+function hitsProp(x: number, z: number): boolean {
+  for (const prop of trackObstacles()) {
+    const dx = x - prop.x
+    const dz = z - prop.z
+    const reach = prop.r + CAR_RADIUS
+    if (dx * dx + dz * dz < reach * reach) return true
+  }
+  return false
 }
 
 /**

@@ -39,11 +39,48 @@ export const OUTSIDE_AIR = '#e9edf1'
 export const OUTSIDE_FOG_NEAR = 50
 export const OUTSIDE_FOG_FAR = 185
 
-/** Racing surface, its kerbs, and the broken lane line. Only three values on
- *  purpose: the track is a white ribbon with a dark edge, not a painted circuit. */
-export const TRACK_SURFACE = '#ffffff'
-export const TRACK_BORDER = '#3a4048'
-export const TRACK_LINE = '#c2c8d0'
+/**
+ * The circuit. Asphalt rather than the white ribbon it used to be: white tarmac
+ * on light grey ground had no material to it, and every marking laid on it had
+ * to be a grey darker than the road, which is the opposite of how a track reads.
+ * Dark surface, white paint, red/white kerbs — the marking colours are now the
+ * bright ones, so they carry at the far end of the straight.
+ *
+ * Still deliberately a small set: two greys for the road, two for the paint, two
+ * for the kerb. Everything else on the circuit is furniture (see trackProps).
+ */
+export const TRACK_SURFACE = '#4a4f57'
+/** Chequer squares, and the shadow line under the kerb. Near-black, not black —
+ *  same reason as NIGHT_AIR. */
+export const TRACK_BORDER = '#2a2e34'
+/** Lane dashes, edge lines and the light half of the start chequer. */
+export const TRACK_LINE = '#f1f3f6'
+
+/** Rumble strip. The one saturated colour on the driving surface, so the edge of
+ *  the road is legible from the chase camera without a dark band to outline it. */
+export const KERB_RED = '#c6382e'
+export const KERB_WHITE = '#eceee9'
+
+/**
+ * Verge and infield. Two tones alternating per segment, which reads as mown
+ * stripes rather than a flat green field — the same trick that stops the tarmac
+ * from looking like a decal, applied to the ground it sits on.
+ */
+export const GRASS_DARK = '#3f6b39'
+export const GRASS_LIGHT = '#4d7d43'
+
+/** Track furniture. Hoardings cycle through the accents; the rest is structure. */
+export const PROP_STEEL = '#ccd2d8'
+export const PROP_TYRE = '#1c1f23'
+export const PROP_TRUNK = '#4a3a2c'
+export const PROP_LEAF = '#37633a'
+export const PROP_LEAF_ALT = '#2e5533'
+export const PROP_CONE = '#df6a1e'
+export const PROP_SEAT = '#2f5fa0'
+export const PROP_SEAT_ALT = '#b3392f'
+export const PROP_LIGHT_OFF = '#3a1512'
+export const PROP_LIGHT_ON = '#ff2a1c'
+export const HOARDING_COLORS = ['#1f4e8c', '#c6382e', '#d9a021', '#2f7d5b', '#eceee9'] as const
 
 /**
  * What the background and the fog become at full blackout in the head-lamps
