@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { gsap, ScrollTrigger } from '@/lib/gsap'
 import { buildAssemblyTimeline } from '@/animations/buildAssemblyTimeline'
+import { setAssemblyHandle } from '@/animations/assemblyHandle'
 import { resetCameraState } from '@/animations/cameraPath'
 import { resetPaintState } from '@/animations/paintState'
 import { resetLightingState } from '@/animations/lightingState'
@@ -31,7 +32,11 @@ export function useAssemblyTimeline() {
     // is shown finished rather than animating on scroll.
     if (prefersReducedMotion) {
       timeline.progress(1).pause()
+      // Published with no trigger: the transform still needs the timeline (to read
+      // that it is already assembled), and there is nothing to disable.
+      setAssemblyHandle(timeline, null)
       return () => {
+        setAssemblyHandle(null, null)
         timeline.kill()
       }
     }
@@ -56,10 +61,15 @@ export function useAssemblyTimeline() {
       },
     })
 
+    // Published for the robot transform, which seeks this to its end and holds the
+    // trigger down while the panels are folded — see useRobotTransform.
+    setAssemblyHandle(timeline, trigger)
+
     // Sections are sized in vh, so a mobile URL-bar resize changes the mapping.
     ScrollTrigger.refresh()
 
     return () => {
+      setAssemblyHandle(null, null)
       trigger.kill()
       timeline.kill()
       // Drop tweens still holding references to unmounted Object3Ds.

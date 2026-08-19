@@ -4,6 +4,7 @@ import { SceneCopy } from '@/components/ui/SceneCopy'
 import { ProgressRail } from '@/components/ui/ProgressRail'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { FreeLookToggle } from '@/components/ui/FreeLookToggle'
+import { TransformToggle } from '@/components/ui/TransformToggle'
 import { FeatureHint } from '@/components/ui/FeatureHint'
 import { ScrollSpeedPicker } from '@/components/ui/ScrollSpeedPicker'
 import { PaintPicker } from '@/components/ui/PaintPicker'
@@ -11,6 +12,7 @@ import { useSmoothScroll } from '@/hooks/useSmoothScroll'
 import { useDeviceTier } from '@/hooks/useDeviceTier'
 import { useAssemblyTimeline } from '@/hooks/useAssemblyTimeline'
 import { useFreeLookLock } from '@/hooks/useFreeLookLock'
+import { useRobotTransform } from '@/hooks/useRobotTransform'
 
 // three + @react-three are ~240kB gzip. Splitting them out of the entry lets the
 // copy layer and HUD paint immediately instead of waiting on the WebGL bundle.
@@ -22,6 +24,8 @@ function App() {
   // Builds itself once the rig reports modelReady; see the hook.
   useAssemblyTimeline()
   useFreeLookLock()
+  // Drives the car/robot fold off the store's robotMode flag.
+  useRobotTransform()
 
   return (
     <>
@@ -31,6 +35,7 @@ function App() {
       </Suspense>
       <SceneCopy />
       <FreeLookToggle />
+      <TransformToggle />
       <FeatureHint />
       <ScrollSpeedPicker />
       <PaintPicker />

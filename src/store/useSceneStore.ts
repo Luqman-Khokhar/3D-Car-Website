@@ -120,6 +120,22 @@ interface SceneState {
    * scroll is locked and the user orbits/pans the garage with the cursor.
    */
   freeLook: boolean
+  /**
+   * Autobot mode. The eighteen car panels fold onto a robot skeleton and stay
+   * there until the same button is pressed again.
+   *
+   * Strictly a sub-mode of free look, not a peer of it. The fold is driven by a
+   * GSAP timeline that writes the same part transforms the scrubbed assembly
+   * timeline owns, so page scroll has to be locked for the whole time the robot is
+   * up — and free look is already the mode that locks it. `setFreeLook`/
+   * `toggleFreeLook` therefore clear this on the way out, and `setRobotMode(true)`
+   * turns free look on rather than assuming it already is.
+   */
+  robotMode: boolean
+  /** True while the fold (or the unfold) is mid-flight. The toggle disables itself
+   *  for the duration: reversing a half-played transform timeline is fine, but
+   *  starting a second one on top of it is not. */
+  transforming: boolean
   /** Hex of the swatch the user has picked in the paint scene. Mirrors
    *  paintState.targetColor for the UI's sake — the render loop reads the
    *  three.Color directly and never subscribes to this. */
@@ -137,6 +153,9 @@ interface SceneState {
   setPrefersReducedMotion: (reduced: boolean) => void
   setFreeLook: (on: boolean) => void
   toggleFreeLook: () => void
+  setRobotMode: (on: boolean) => void
+  toggleRobotMode: () => void
+  setTransforming: (busy: boolean) => void
   setBodyColor: (hex: string) => void
   setScrollSpeed: (id: ScrollSpeedId) => void
   cycleLightSwitch: (group: LightSwitchGroup) => void
@@ -150,6 +169,8 @@ export const useSceneStore = create<SceneState>((set) => ({
   lowPower: false,
   prefersReducedMotion: false,
   freeLook: false,
+  robotMode: false,
+  transforming: false,
   selectedBodyColor: BODY,
   scrollSpeed: readStoredScrollSpeed(),
   lightSwitches: readStoredLightSwitches(),
@@ -160,8 +181,15 @@ export const useSceneStore = create<SceneState>((set) => ({
   setLoadProgress: (loadProgress) => set({ loadProgress }),
   setLowPower: (lowPower) => set({ lowPower }),
   setPrefersReducedMotion: (prefersReducedMotion) => set({ prefersReducedMotion }),
-  setFreeLook: (freeLook) => set({ freeLook }),
-  toggleFreeLook: () => set((s) => ({ freeLook: !s.freeLook })),
+  // Leaving free look drops the robot with it — see the robotMode doc above.
+  setFreeLook: (freeLook) => set(freeLook ? { freeLook } : { freeLook, robotMode: false }),
+  toggleFreeLook: () =>
+    set((s) => (s.freeLook ? { freeLook: false, robotMode: false } : { freeLook: true })),
+  setRobotMode: (robotMode) =>
+    set(robotMode ? { robotMode, freeLook: true } : { robotMode }),
+  toggleRobotMode: () =>
+    set((s) => (s.robotMode ? { robotMode: false } : { robotMode: true, freeLook: true })),
+  setTransforming: (transforming) => set({ transforming }),
   setBodyColor: (hex) => {
     setPaintTarget(hex)
     set({ selectedBodyColor: hex })

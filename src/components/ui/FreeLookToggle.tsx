@@ -9,6 +9,7 @@ import { useSceneStore } from '@/store/useSceneStore'
  */
 export function FreeLookToggle() {
   const freeLook = useSceneStore((s) => s.freeLook)
+  const robotMode = useSceneStore((s) => s.robotMode)
   const modelReady = useSceneStore((s) => s.modelReady)
   const toggleFreeLook = useSceneStore((s) => s.toggleFreeLook)
 
@@ -47,7 +48,9 @@ export function FreeLookToggle() {
         }`}
       >
         <p className="rounded-full border border-stone-300/25 bg-black/40 px-4 py-2 text-center font-mono text-[0.6rem] tracking-[0.15em] text-stone-300 uppercase backdrop-blur-sm md:text-[0.65rem]">
-          Drag to look · Scroll to zoom · Arrows to drive · Click door &amp; switches · Esc to exit
+          {robotMode
+            ? 'Drag to look · Scroll to zoom · The robot does not drive · Esc to exit'
+            : 'Drag to look · Scroll to zoom · Arrows to drive · Click door & switches · Esc to exit'}
         </p>
       </div>
     </>

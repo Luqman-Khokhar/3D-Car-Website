@@ -165,6 +165,12 @@ function CarShadow({ children }: { children: React.ReactNode }) {
 export function SceneCanvas() {
   const lowPower = useSceneStore((s) => s.lowPower)
   const freeLook = useSceneStore((s) => s.freeLook)
+  const robotMode = useSceneStore((s) => s.robotMode)
+  /** A robot has no throttle and no axles. Unmounting both is also what hands the
+   *  wheels' rotation.x back to the fold: WheelMotion restores whatever pose it
+   *  captured on mount as it unmounts, and React runs that cleanup before the
+   *  transform effect in App fires. */
+  const driveable = freeLook && !robotMode
 
   return (
     <div className="fixed inset-0 z-0">
@@ -220,15 +226,15 @@ export function SceneCanvas() {
           <CameraRig />
           {/* Arrow-key driving, same reachability rule as the door button. Ordered
               first so DriveCamera reads this frame's car position, not last frame's. */}
-          {freeLook && <DriveControls />}
+          {driveable && <DriveControls />}
           {/* Wheels roll and steer off the same state. Mounted here rather than
               inside ProceduralCar because it borrows rotation.x from the assembly
               timeline and has to hand it back — see WheelMotion. */}
-          {freeLook && <WheelMotion />}
+          {driveable && <WheelMotion />}
           {/* Free-look orbit and the drive chase camera trade the view back and
               forth via isCarAway() — see FreeLookControls' `away` check. */}
           {freeLook && <FreeLookControls />}
-          {freeLook && <DriveCamera />}
+          {driveable && <DriveCamera />}
           {debugEnabled() && <DebugBridge />}
           {!lowPower && <PostFX />}
           </GarageEnvironment>

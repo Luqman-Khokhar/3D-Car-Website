@@ -28,6 +28,10 @@ export interface SceneDebugHandle {
   driveState: DriveState
   /** Free look, which is what mounts DriveControls and DriveCamera. */
   setFreeLook: (value: boolean) => void
+  /** Autobot mode. Turns free look on with it, seeks the assembly to its end and
+   *  plays the fold — so this is the whole transform in one call. Allow ~2.5 s of
+   *  wall clock (much more under SwiftShader) before shooting the robot. */
+  setRobotMode: (value: boolean) => void
 }
 
 declare global {
@@ -47,6 +51,7 @@ export function DebugBridge() {
   const camera = useThree((s) => s.camera)
   const gl = useThree((s) => s.gl)
   const setFreeLook = useSceneStore((s) => s.setFreeLook)
+  const setRobotMode = useSceneStore((s) => s.setRobotMode)
 
   useEffect(() => {
     window.__carScene = {
@@ -57,11 +62,12 @@ export function DebugBridge() {
       garageDoorState,
       driveState,
       setFreeLook,
+      setRobotMode,
     }
     return () => {
       delete window.__carScene
     }
-  }, [scene, camera, gl, setFreeLook])
+  }, [scene, camera, gl, setFreeLook, setRobotMode])
 
   return null
 }

@@ -10,6 +10,7 @@ import type { CarMaterials } from '@/hooks/useCarMaterials'
 import { registerPart, clearRegistry } from '@/animations/partRegistry'
 import { driveState } from '@/animations/driveState'
 import { useSceneStore } from '@/store/useSceneStore'
+import { RobotRig } from './RobotRig'
 
 /** Per-second fraction of the remaining gap closed while easing the car back
  *  to the garage origin after free look ends — same exponential form as
@@ -118,6 +119,11 @@ export function ProceduralCar() {
       {merged.map(({ part, groups }) => (
         <PartGroup key={part.id} part={part} groups={groups} materials={materials} />
       ))}
+      {/* Robot skeleton, collapsed and hidden until the transform runs. Inside the
+          same group so the panels and the limbs share one parent transform, and
+          handed this component's materials so the painted armour tracks the paint
+          scene — see RobotRig. */}
+      <RobotRig materials={materials} />
     </group>
   )
 }

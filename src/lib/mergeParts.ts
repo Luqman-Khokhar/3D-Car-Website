@@ -80,7 +80,7 @@ export interface MergedGroup {
  * Transforms are baked into the vertices because a merged mesh has a single
  * transform for everything inside it.
  */
-export function mergePart(part: CarPart): MergedGroup[] {
+export function mergePart(part: Pick<CarPart, 'material' | 'primitives'>): MergedGroup[] {
   const byMaterial = new Map<MaterialKey, BufferGeometry[]>()
 
   for (const primitive of part.primitives) {

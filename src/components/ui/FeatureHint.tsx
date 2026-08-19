@@ -42,7 +42,7 @@ export function FeatureHint() {
   if (!modelReady || dismissed || freeLook) return null
 
   return (
-    <div className="pointer-events-none fixed top-[7.5rem] right-5 z-30 flex justify-end md:top-32 md:right-6">
+    <div className="pointer-events-none fixed top-[10.75rem] right-5 z-30 flex justify-end md:top-[12.25rem] md:right-6">
       <div className="pointer-events-auto relative max-w-[13rem] rounded-2xl border border-stone-300/60 bg-black/70 px-4 py-3 text-stone-100 shadow-lg backdrop-blur-sm">
         <span
           aria-hidden="true"
@@ -65,7 +65,8 @@ export function FeatureHint() {
             className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400 align-middle"
           />
           Switches, the garage door and the clock are all live — try{' '}
-          <span className="text-stone-50">360° View</span>.
+          <span className="text-stone-50">360° View</span>, or{' '}
+          <span className="text-stone-50">Transform</span> to stand the car up.
         </p>
       </div>
     </div>

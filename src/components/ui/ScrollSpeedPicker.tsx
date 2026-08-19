@@ -2,7 +2,8 @@ import { useSceneStore, SCROLL_SPEEDS } from '@/store/useSceneStore'
 import type { ScrollSpeedId } from '@/store/useSceneStore'
 
 /**
- * Scroll pacing selector, stacked under the 360° toggle.
+ * Scroll pacing selector, third in the top-right stack: 360° toggle, Transform,
+ * then this.
  *
  * The assembly timeline is scrubbed by scroll position, so the only honest way
  * to slow the animation down is to slow the input that drives it. This writes
@@ -22,7 +23,7 @@ export function ScrollSpeedPicker() {
 
   return (
     <div
-      className={`fixed top-[4.25rem] right-5 z-30 transition-opacity duration-300 md:top-[4.75rem] md:right-6 ${
+      className={`fixed top-[7.5rem] right-5 z-30 transition-opacity duration-300 md:top-[8.5rem] md:right-6 ${
         freeLook ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}
     >
