@@ -8,6 +8,7 @@ import type { GarageDoorState } from '@/animations/garageDoorState'
 import { driveState } from '@/animations/driveState'
 import type { DriveState } from '@/animations/driveState'
 import { useSceneStore } from '@/store/useSceneStore'
+import { requestFrame } from '@/lib/frame'
 
 export interface SceneDebugHandle {
   scene: Scene
@@ -32,6 +33,12 @@ export interface SceneDebugHandle {
    *  plays the fold — so this is the whole transform in one call. Allow ~2.5 s of
    *  wall clock (much more under SwiftShader) before shooting the robot. */
   setRobotMode: (value: boolean) => void
+  /** The whole scene store — tier, settled flag, modes — for automated checks.
+   *  `store.getState().quality` is the tier AdaptiveQuality landed on. */
+  store: typeof useSceneStore
+  /** The canvas renders on demand. After writing any of the live state objects
+   *  above directly, call this or the change will not be drawn. */
+  requestFrame: () => void
 }
 
 declare global {
@@ -63,6 +70,8 @@ export function DebugBridge() {
       driveState,
       setFreeLook,
       setRobotMode,
+      store: useSceneStore,
+      requestFrame,
     }
     return () => {
       delete window.__carScene

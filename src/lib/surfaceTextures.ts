@@ -140,12 +140,15 @@ function tiledNoise(x: number, y: number, period: number) {
   const yi = Math.floor(y)
   const xf = smooth(x - xi)
   const yf = smooth(y - yi)
-  const wrap = (v: number) => ((v % period) + period) % period
 
-  const x0 = wrap(xi)
-  const y0 = wrap(yi)
-  const x1 = wrap(xi + 1)
-  const y1 = wrap(yi + 1)
+  // Every caller samples u, v in [0, 1), so the lattice coordinates are never
+  // negative and the wrap is one modulo. This used to allocate a wrap closure
+  // and run two modulos per corner — the floor map alone makes ~1.3M calls, and
+  // that was the single largest block of main-thread time before first paint.
+  const x0 = xi % period
+  const y0 = yi % period
+  const x1 = (xi + 1) % period
+  const y1 = (yi + 1) % period
 
   const a = hashInt(x0, y0)
   const b = hashInt(x1, y0)

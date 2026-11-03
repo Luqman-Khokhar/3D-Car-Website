@@ -43,6 +43,23 @@ export const lightingState: LightingState = {
  */
 export const roomDim = { value: 0 }
 
+/**
+ * Output of each ceiling-tube row (back, mid, front), 0..1, after the scroll
+ * atmosphere and the wall switches have both had their say. Written by
+ * GarageLights every frame; read by the area lights in CeilingStrips, which live
+ * in their own chunk and so cannot share GarageLights' refs.
+ */
+export const stripRowLevel: [number, number, number] = [1, 1, 1]
+
+/** Ceiling strip fixture grid, mirroring `ceilingLights()` in
+ *  src/scenes/garage.ts and `LAMP_X`/`LAMP_Z` in GarageEnvironment.tsx — all
+ *  three have to stay in step so every tube the viewer sees overhead is one
+ *  that actually lights the floor beneath it. */
+export const STRIP_X = [-3.4, 1.6]
+export const STRIP_Z = [-4.6, 1.4, 6.2]
+/** Area-light intensity of one strip at full output. */
+export const STRIP_INTENSITY = 22
+
 export function resetLightingState() {
   lightingState.dim = 0
   lightingState.rearGlow = 0

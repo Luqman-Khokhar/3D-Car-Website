@@ -34,7 +34,7 @@ const TILE = 6.7
  * stone; breaking it into patches is what makes it read as a slab that has had
  * cars on it. See createConcreteFloorMaps.
  */
-export const GroundPlane = memo(function GroundPlane() {
+export const GroundPlane = memo(function GroundPlane({ pbr }: { pbr: boolean }) {
   const maps = useMemo(() => {
     const built = createConcreteFloorMaps(GARAGE_FLOOR)
     for (const texture of [built.map, built.normalMap, built.roughnessMap]) {
@@ -54,7 +54,13 @@ export const GroundPlane = memo(function GroundPlane() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, CENTER_Z]} receiveShadow>
       <planeGeometry args={[WIDTH, DEPTH]} />
+      {/* Low tier: Lambert. The slab is ~40% of most frames, and the PBR BRDF
+          per light per pixel is what it costs; measured at 45 -> 59 fps on an
+          Intel UHD 620. What is lost is the gloss variation — the albedo and the
+          aggregate normal stay. Keyed so the swap rebuilds the mesh cleanly. */}
+      {pbr ? (
       <meshStandardMaterial
+        key="pbr"
         map={maps.map}
         normalMap={maps.normalMap}
         // Shallow. Concrete aggregate is millimetres across; anything stronger
@@ -66,6 +72,9 @@ export const GroundPlane = memo(function GroundPlane() {
         roughness={1}
         metalness={0.12}
       />
+      ) : (
+        <meshLambertMaterial key="lambert" map={maps.map} normalMap={maps.normalMap} normalScale={[0.35, 0.35]} />
+      )}
     </mesh>
   )
 })

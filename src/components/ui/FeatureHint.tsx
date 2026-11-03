@@ -29,7 +29,6 @@ function markHintSeen(): void {
  */
 export function FeatureHint() {
   const freeLook = useSceneStore((s) => s.freeLook)
-  const modelReady = useSceneStore((s) => s.modelReady)
   const [dismissed, setDismissed] = useState(hasSeenHint)
 
   useEffect(() => {
@@ -39,36 +38,40 @@ export function FeatureHint() {
     }
   }, [freeLook, dismissed])
 
-  if (!modelReady || dismissed || freeLook) return null
+  if (dismissed || freeLook) return null
 
+  // Anchored to the left of the 360° button it is about, with the arrow pointing
+  // straight at it. It used to hang under the whole stack with an arrow aimed at
+  // the scroll-speed control, three buttons away from the one it names.
   return (
-    <div className="pointer-events-none fixed top-[10.75rem] right-5 z-30 flex justify-end md:top-[12.25rem] md:right-6">
-      <div className="pointer-events-auto relative max-w-[13rem] rounded-2xl border border-stone-300/60 bg-black/70 px-4 py-3 text-stone-100 shadow-lg backdrop-blur-sm">
+    <div
+      role="note"
+      className="absolute top-0 right-full mr-3 w-[min(13rem,calc(100vw-13rem))] rounded-2xl border border-stone-300/50 bg-black/75 px-4 py-3 text-stone-100 shadow-lg backdrop-blur-sm motion-safe:animate-[hint-in_400ms_ease-out_600ms_both]"
+    >
+      <span
+        aria-hidden="true"
+        className="absolute top-3.5 -right-1.5 h-3 w-3 rotate-45 border-t border-r border-stone-300/50 bg-black/75"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          setDismissed(true)
+          markHintSeen()
+        }}
+        aria-label="Dismiss hint"
+        className="absolute top-1 right-1 grid h-7 w-7 place-items-center rounded-full leading-none text-stone-400 transition-colors hover:text-stone-100 focus-visible:ring-2 focus-visible:ring-stone-200 focus-visible:outline-none"
+      >
+        ×
+      </button>
+      <p className="pr-4 font-mono text-[0.65rem] leading-relaxed tracking-wide">
         <span
           aria-hidden="true"
-          className="absolute -top-1.5 right-8 h-3 w-3 rotate-45 border-t border-l border-stone-300/60 bg-black/70"
+          className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400 align-middle motion-reduce:animate-none"
         />
-        <button
-          type="button"
-          onClick={() => {
-            setDismissed(true)
-            markHintSeen()
-          }}
-          aria-label="Dismiss hint"
-          className="absolute top-1.5 right-2 leading-none text-stone-400 hover:text-stone-100"
-        >
-          ×
-        </button>
-        <p className="pr-3 font-mono text-[0.65rem] leading-relaxed tracking-wide">
-          <span
-            aria-hidden="true"
-            className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400 align-middle"
-          />
-          Switches, the garage door and the clock are all live — try{' '}
-          <span className="text-stone-50">360° View</span>, or{' '}
-          <span className="text-stone-50">Transform</span> to stand the car up.
-        </p>
-      </div>
+        Switches, the garage door and the clock are all live — try{' '}
+        <span className="text-stone-50">360° View</span>, or{' '}
+        <span className="text-stone-50">Transform</span> to stand the car up.
+      </p>
     </div>
   )
 }

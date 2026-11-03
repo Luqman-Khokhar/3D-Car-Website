@@ -1,9 +1,10 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Color } from 'three'
 import type { MeshPhysicalMaterial } from 'three'
-import { paintState } from '@/animations/paintState'
+import { paintState, setPaintTarget } from '@/animations/paintState'
 import { PRIMER } from '@/scenes/palette'
+import { useSceneStore } from '@/store/useSceneStore'
 
 /**
  * Never let clearcoat reach exactly 0. three keys the USE_CLEARCOAT shader define
@@ -72,6 +73,19 @@ export function applyPaint(material: MeshPhysicalMaterial, t: number) {
 export function usePaintPass(material: MeshPhysicalMaterial) {
   const applied = useRef(-1)
   const appliedGeneration = useRef(-1)
+
+  // The swatch lives in the store (the picker is DOM); the paint target lives
+  // here, with three. Mirrored transiently so a pick never re-renders the car.
+  useEffect(() => {
+    let current = ''
+    const sync = (hex: string) => {
+      if (hex === current) return
+      current = hex
+      setPaintTarget(hex)
+    }
+    sync(useSceneStore.getState().selectedBodyColor)
+    return useSceneStore.subscribe((state) => sync(state.selectedBodyColor))
+  }, [])
 
   useFrame(() => {
     const t = paintState.progress

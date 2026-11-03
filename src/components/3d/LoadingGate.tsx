@@ -3,12 +3,19 @@ import { useProgress } from '@react-three/drei'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { useSceneStore } from '@/store/useSceneStore'
 
-/** Hold the overlay this long after 100% so the fade does not stutter. */
-const SETTLE_MS = 400
+/** Unmount the overlay this long after 100%. Must outlast LoadingScreen's
+ *  700 ms fade: at 400 ms it used to be pulled while still ~40% opaque, which
+ *  read as a pop at the end of the reveal. */
+const SETTLE_MS = 760
+/** Reveal anyway this long after the rig is up, should calibration never report
+ *  back. AdaptiveQuality caps itself well under this; it is a backstop. */
+const SETTLED_BACKSTOP_MS = 7000
 
 /**
- * Covers the canvas until both conditions hold: drei's loading manager reports
- * every queued asset in, and the car rig has mounted and registered its parts.
+ * Covers the canvas until all three conditions hold: drei's loading manager
+ * reports every queued asset in, the car rig has mounted and registered its
+ * parts, and AdaptiveQuality has settled on a render tier — so any tier change,
+ * and the shader rebuild that comes with it, happens behind this overlay.
  *
  * The procedural rig queues nothing through the loading manager, so `active`
  * goes false immediately and `modelReady` is what actually gates the reveal.
@@ -17,14 +24,22 @@ const SETTLE_MS = 400
 export function LoadingGate() {
   const { active, progress } = useProgress()
   const modelReady = useSceneStore((s) => s.modelReady)
+  const sceneSettled = useSceneStore((s) => s.sceneSettled)
   const setLoadProgress = useSceneStore((s) => s.setLoadProgress)
   const [dismissed, setDismissed] = useState(false)
+  const [backstop, setBackstop] = useState(false)
 
   useEffect(() => {
     setLoadProgress(progress)
   }, [progress, setLoadProgress])
 
-  const complete = !active && modelReady
+  useEffect(() => {
+    if (!modelReady) return
+    const timer = window.setTimeout(() => setBackstop(true), SETTLED_BACKSTOP_MS)
+    return () => window.clearTimeout(timer)
+  }, [modelReady])
+
+  const complete = !active && modelReady && (sceneSettled || backstop)
 
   useEffect(() => {
     if (!complete) return
@@ -36,7 +51,8 @@ export function LoadingGate() {
   if (dismissed) return null
 
   // With nothing queued, drei reports 0; show rig-mount as the real signal.
-  const shown = active ? progress : modelReady ? 100 : 60
+  // Calibration is the last step, so it gets the last stretch of the bar.
+  const shown = active ? progress : complete ? 100 : modelReady ? 88 : 60
 
   return <LoadingScreen progress={shown} hidden={complete} />
 }

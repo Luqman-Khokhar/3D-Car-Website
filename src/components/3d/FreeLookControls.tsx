@@ -6,6 +6,7 @@ import { cameraState } from '@/animations/cameraPath'
 import { isCarAway } from '@/animations/driveState'
 import { ROOM_HALF_X, ROOM_HALF_Z } from '@/scenes/garage'
 import { useSceneStore } from '@/store/useSceneStore'
+import { requestFrame } from '@/lib/frame'
 
 /** Keeps the near plane off the wall geometry rather than flush against it. */
 const WALL_MARGIN = 0.7
@@ -103,6 +104,7 @@ export function FreeLookControls() {
       c.target.lerp(ROBOT_VIEW.target, t)
       camera.position.lerp(ROBOT_VIEW.eye, t)
       if (camera.position.distanceTo(ROBOT_VIEW.eye) < FRAME_EPSILON) reframing.current = false
+      else requestFrame()
     }
 
     const targetMaxY = robotMode ? ROBOT_TARGET_MAX_Y : TARGET_MAX_Y

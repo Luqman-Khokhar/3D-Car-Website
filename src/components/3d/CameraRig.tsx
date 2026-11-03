@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { PerspectiveCamera, Vector3 } from 'three'
 import { cameraState } from '@/animations/cameraPath'
 import { useSceneStore } from '@/store/useSceneStore'
+import { requestFrame } from '@/lib/frame'
 
 /**
  * Fraction of viewport width to bias the projection by, pushing the car into the
@@ -101,6 +102,8 @@ export function CameraRig() {
     camera.lookAt(lookAt.current)
 
     if (camera.position.distanceTo(desired) < RETURN_EPSILON) returning.current = false
+    // Mid-blend: the demand loop has to keep drawing until the camera lands.
+    else requestFrame()
   })
 
   return null

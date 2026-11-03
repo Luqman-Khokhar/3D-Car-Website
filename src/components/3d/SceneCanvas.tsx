@@ -1,9 +1,7 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { Suspense, lazy, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { ContactShadows } from '@react-three/drei'
-import { ACESFilmicToneMapping, Color, NoToneMapping } from 'three'
-import type { DirectionalLight, Group } from 'three'
-import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
+import { AgXToneMapping, Color } from 'three'
+import type { Group } from 'three'
 import { CarModel } from './CarModel'
 import { GroundPlane } from './GroundPlane'
 import { Garage } from './Garage'
@@ -15,12 +13,14 @@ import { DriveControls } from './DriveControls'
 import { DriveCamera } from './DriveCamera'
 import { WheelMotion } from './WheelMotion'
 import { GarageEnvironment } from './GarageEnvironment'
-import { PostFX } from './PostFX'
 import { DebugBridge } from './DebugBridge'
+import { CarContactShadow } from './CarContactShadow'
+import { RenderDriver, ShadowMapGate } from './RenderDriver'
+import { AdaptiveQuality } from './AdaptiveQuality'
 import { debugEnabled } from '@/lib/debug'
+import { QUALITY } from '@/lib/quality'
 import { roomDim } from '@/animations/lightingState'
-import { driveState } from '@/animations/driveState'
-import { DOOR_Z } from '@/scenes/garage'
+import { driveState, outsideBlend } from '@/animations/driveState'
 import {
   GARAGE_WALL,
   FOG_NEAR,
@@ -32,30 +32,24 @@ import {
 } from '@/scenes/palette'
 import { useSceneStore } from '@/store/useSceneStore'
 
-/** Depth past the door plane over which the world fades to white as the car
- *  drives out — see NightPass. Short enough that the whiteout reads as the
- *  car passing through the doorway, not a lingering cross-fade. */
-const OUTSIDE_FADE_DEPTH = 4
-
-/** Retina is enough; 3x DPR on a phone quadruples fill cost for no visible gain. */
-const DPR: [number, number] = [1, 2]
-
-// RectAreaLight needs its BRDF lookup tables uploaded before first use or it
-// renders black. Idempotent, and cheap enough to call at module scope.
-RectAreaLightUniformsLib.init()
+/** Post chain: postprocessing + N8AO, ~250 kB that only tiers with `post` load.
+ *  useDeviceTier starts the fetch as soon as the tier is known. */
+const PostFX = lazy(() => import('./PostFX'))
 
 /**
- * Tone mapping is owned here rather than by the `gl` prop, because it depends on
- * whether the post chain is mounted and that is only known after the device tier
- * resolves. With the composer up, AgX runs as the last effect on HDR values; with
- * it down, the renderer has to do it or everything clips to white.
+ * Renderer tone mapping when no composer is mounted. AgX rather than R3F's ACES
+ * default so the low tier holds the same look as the others — the lamp emissives
+ * in useLampPass were tuned against AgX's hue handling, and under ACES the tail
+ * lamp desaturates differently. PostFX turns this off while it is mounted and
+ * runs AgX as its last effect instead; it mounts after this, so its layout
+ * effect lands second.
  */
-function ToneMappingPolicy({ managed }: { managed: boolean }) {
+function ToneMappingPolicy() {
   const gl = useThree((s) => s.gl)
 
-  useEffect(() => {
-    gl.toneMapping = managed ? NoToneMapping : ACESFilmicToneMapping
-  }, [gl, managed])
+  useLayoutEffect(() => {
+    gl.toneMapping = AgXToneMapping
+  }, [gl])
 
   return null
 }
@@ -108,39 +102,6 @@ function NightPass() {
   return null
 }
 
-/** How far past the door the car is before the sun is at full strength. Same
- *  ramp as the air colour, so the light and the haze arrive together. */
-const outsideBlend = () =>
-  Math.min(Math.max((driveState.z - DOOR_Z) / OUTSIDE_FADE_DEPTH, 0), 1)
-
-/** Peak intensity of the drive-out sun. */
-const SUN_INTENSITY = 1.35
-
-/**
- * Sun for the circuit. Every light in GarageLights is a room fixture at a fixed
- * point in the garage — the gantry spot and the six ceiling strips fall off long
- * before the back straight, so a car 60 m out was lit by the hemisphere and two
- * bounce fills only, and read as a grey paper cut-out on white tarmac.
- *
- * Ramped off the car's own position rather than mounted permanently, because the
- * same light indoors would fight the fixtures it is meant to have nothing to do
- * with. Deliberately not dimmed by the blackout driver: outside is daylight, the
- * same reason OutsideWorld and RaceTrack are unlit.
- *
- * No shadow map — a second shadow-casting light is the most expensive thing that
- * could be added here, and the car's grounding outside comes from the contact
- * shadow following it instead.
- */
-function OutsideSun() {
-  const light = useRef<DirectionalLight>(null)
-
-  useFrame(() => {
-    if (light.current) light.current.intensity = SUN_INTENSITY * outsideBlend()
-  })
-
-  return <directionalLight ref={light} position={[16, 24, -9]} intensity={0} color="#fff4e4" />
-}
-
 /**
  * Follows the car with the contact shadow so it stays grounded once it is out on
  * the circuit. Previously pinned to the origin, which was fine while the car
@@ -163,25 +124,43 @@ function CarShadow({ children }: { children: React.ReactNode }) {
  * so the canvas itself never scrolls.
  */
 export function SceneCanvas() {
-  const lowPower = useSceneStore((s) => s.lowPower)
+  const quality = useSceneStore((s) => s.quality)
   const freeLook = useSceneStore((s) => s.freeLook)
   const robotMode = useSceneStore((s) => s.robotMode)
+  const renderEnabled = useSceneStore((s) => s.renderEnabled)
+  const settings = QUALITY[quality]
   /** A robot has no throttle and no axles. Unmounting both is also what hands the
    *  wheels' rotation.x back to the fold: WheelMotion restores whatever pose it
    *  captured on mount as it unmounts, and React runs that cleanup before the
    *  transform effect in App fires. */
   const driveable = freeLook && !robotMode
+  /** Starting resolution only; AdaptiveQuality owns it from the first frame. A
+   *  changing prop here would fight its setDpr calls. */
+  const [initialDpr] = useState(() =>
+    Math.max(settings.minDpr, Math.min(window.devicePixelRatio || 1, settings.maxDpr)),
+  )
 
   return (
-    <div className="fixed inset-0 z-0">
+    // data-free-look switches the canvas cursor to grab/grabbing; see index.css.
+    <div className="fixed inset-0 z-0" data-free-look={freeLook ? '' : undefined}>
       <Canvas
-        dpr={DPR}
+        dpr={initialDpr}
+        // Draw only when something changed — see RenderDriver. A parked camera
+        // costs nothing instead of the full chain sixty times a second. Held at
+        // 'never' until AdaptiveQuality has compiled every shader in parallel, so
+        // the first frame does not link forty programs one after another.
+        frameloop={renderEnabled ? 'demand' : 'never'}
+        onCreated={({ gl }) => {
+          // Reading back compile logs forces each shader to finish synchronously,
+          // the opposite of what the parallel precompile is for. Dev keeps them.
+          gl.debug.checkShaderErrors = import.meta.env.DEV
+        }}
         // 'variance' = VSMShadowMap. R3F's default (PCFSoftShadowMap) is deprecated
         // in three 0.185 and logs a warning; VSM is soft and current.
-        shadows={lowPower ? false : 'variance'}
+        shadows={settings.shadows ? 'variance' : false}
         // antialias is redundant once PostFX mounts a composer — SMAA in the chain
-        // replaces it. It stays on so the low-power path, which has no chain, is
-        // not left with raw jaggies.
+        // replaces it. It stays on so the low tier, which has no chain, is not
+        // left with raw jaggies.
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         // Framed for the whole 4.3 m car; CameraRig drives it from here on. The
         // far plane has to clear OUTSIDE_FOG_FAR, or the back straight of the
@@ -192,24 +171,29 @@ export function SceneCanvas() {
         {/* Dissolves the far floor into the wall. Without it the 60m plane ends on
             a hard horizon line and the space reads as a void, not a room. */}
         <fog attach="fog" args={[GARAGE_WALL, FOG_NEAR, FOG_FAR]} />
-        <ToneMappingPolicy managed={!lowPower} />
+        <ToneMappingPolicy />
+        <RenderDriver />
+        {/* Everything below commits together — including the lazy post chain and
+            area lights — so the first frame is the final one and every shader
+            compiles once, behind the loading screen. */}
         <Suspense fallback={null}>
           <GarageEnvironment>
-          <GarageLights lowPower={lowPower} />
+          <GarageLights shadows={settings.shadows} areaLights={settings.areaLights} />
           <NightPass />
-          <GroundPlane />
+          <GroundPlane pbr={settings.pbrFloor} />
           <Garage />
           <GarageDoor />
+          <CarModel />
           {/* Soft occlusion where the car meets the floor. The spotlight shadow
               alone leaves a gap under the sills that reads as the car hovering.
-              Still worth its depth pass even with N8AO in the chain: screen-space
-              AO only knows about what is on screen, so it cannot darken under a
-              car whose underside is facing away from the camera.
-              Skipped on low power: this is a full extra depth pass per frame. */}
-          <OutsideSun />
-          {!lowPower && (
+              Still worth its pass even with N8AO in the chain: screen-space AO
+              only knows about what is on screen, so it cannot darken under a car
+              whose underside is facing away from the camera.
+              After CarModel so it reads this frame's drive transform. Skipped on
+              the low tier. */}
+          {settings.contactResolution > 0 && (
             <CarShadow>
-            <ContactShadows
+            <CarContactShadow
               position={[0, 0.012, 0]}
               scale={13}
               // Only needs to reach the sills, not the roof — a tighter far plane
@@ -217,12 +201,12 @@ export function SceneCanvas() {
               far={1.1}
               blur={2.6}
               opacity={0.62}
-              resolution={512}
+              resolution={settings.contactResolution}
               color="#1b1f24"
             />
             </CarShadow>
           )}
-          <CarModel />
+          {settings.shadows && <ShadowMapGate />}
           <CameraRig />
           {/* Arrow-key driving, same reachability rule as the door button. Ordered
               first so DriveCamera reads this frame's car position, not last frame's. */}
@@ -236,7 +220,8 @@ export function SceneCanvas() {
           {freeLook && <FreeLookControls />}
           {driveable && <DriveCamera />}
           {debugEnabled() && <DebugBridge />}
-          {!lowPower && <PostFX />}
+          <AdaptiveQuality />
+          {settings.post && <PostFX ao={settings.ao} />}
           </GarageEnvironment>
         </Suspense>
       </Canvas>

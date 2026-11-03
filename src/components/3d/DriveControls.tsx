@@ -5,6 +5,8 @@ import { garageDoorState } from '@/animations/garageDoorState'
 import { DOOR_OPENING_HALF_WIDTH, DOOR_Z, ROOM_HALF_X, ROOM_HALF_Z } from '@/scenes/garage'
 import { DRIVE_HALF_X, DRIVE_MAX_Z } from '@/scenes/track'
 import { trackObstacles } from '@/scenes/trackProps'
+import { touchDrive } from '@/animations/driveInput'
+import { requestFrame } from '@/lib/frame'
 
 /**
  * Throttle model rather than the old constant 3.2 m/s: a lap of the circuit is
@@ -140,6 +142,8 @@ export function DriveControls() {
       if (!DRIVE_KEYS.has(e.key)) return
       keys.add(e.key)
       e.preventDefault()
+      // The loop is demand-driven: a held key has to start it.
+      requestFrame()
     }
     const onKeyUp = (e: KeyboardEvent) => {
       keys.delete(e.key)
@@ -213,12 +217,26 @@ export function DriveControls() {
   useFrame((_, delta) => {
     if (driveState.returning) return
     const keys = held.current
-    const throttle =
-      (keys.has('ArrowUp') || keys.has('w') || keys.has('W') ? 1 : 0) -
-      (keys.has('ArrowDown') || keys.has('s') || keys.has('S') ? 1 : 0)
-    const turn =
-      (keys.has('ArrowLeft') || keys.has('a') || keys.has('A') ? 1 : 0) -
-      (keys.has('ArrowRight') || keys.has('d') || keys.has('D') ? 1 : 0)
+    // Keyboard and the touch pad sum, clamped, so either can drive and holding
+    // both does not double the throttle.
+    const throttle = Math.max(
+      -1,
+      Math.min(
+        1,
+        (keys.has('ArrowUp') || keys.has('w') || keys.has('W') ? 1 : 0) -
+          (keys.has('ArrowDown') || keys.has('s') || keys.has('S') ? 1 : 0) +
+          touchDrive.throttle,
+      ),
+    )
+    const turn = Math.max(
+      -1,
+      Math.min(
+        1,
+        (keys.has('ArrowLeft') || keys.has('a') || keys.has('A') ? 1 : 0) -
+          (keys.has('ArrowRight') || keys.has('d') || keys.has('D') ? 1 : 0) +
+          touchDrive.turn,
+      ),
+    )
     // Published even on an early return below, so the front wheels centre
     // themselves the moment the key is released rather than staying cranked over
     // for as long as the car happens to be stationary. Left is +1 here and yaw
@@ -241,6 +259,9 @@ export function DriveControls() {
       advance(dt, throttle, turn)
       remaining -= dt
     }
+    // Rolling or still being steered: the next frame is needed whether or not a
+    // key is down, or a coasting car would freeze the moment the key came up.
+    requestFrame()
   })
 
   return null

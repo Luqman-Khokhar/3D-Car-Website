@@ -1,5 +1,6 @@
 import { useSceneStore } from '@/store/useSceneStore'
 import { BODY_SWATCHES } from '@/scenes/palette'
+import { HUD_PANEL } from './hud'
 
 /**
  * Bottom-left swatch row for the paint scene. Visible for the whole scroll
@@ -16,11 +17,16 @@ export function PaintPicker() {
   const setBodyColor = useSceneStore((s) => s.setBodyColor)
 
   const visible = modelReady && !freeLook
+  const selectedName = BODY_SWATCHES.find((swatch) => swatch.hex === selectedBodyColor)?.name
 
   if (!visible) return null
 
   return (
-    <div className="fixed bottom-6 left-6 z-30 flex items-center gap-2.5 rounded-full border border-stone-300/60 bg-black/30 px-3 py-2 backdrop-blur-sm">
+    <div
+      role="group"
+      aria-label="Paint colour"
+      className={`${HUD_PANEL} fixed bottom-5 left-5 z-30 flex items-center gap-2 py-1.5 pr-4 pl-2 md:bottom-6 md:left-6`}
+    >
       {BODY_SWATCHES.map((swatch) => {
         const selected = swatch.hex === selectedBodyColor
         return (
@@ -31,15 +37,20 @@ export function PaintPicker() {
             aria-pressed={selected}
             aria-label={`Paint the car ${swatch.name}`}
             title={swatch.name}
-            className={`h-6 w-6 shrink-0 rounded-full transition-transform focus-visible:ring-2 focus-visible:ring-stone-200 focus-visible:outline-none ${
+            className={`h-7 w-7 shrink-0 rounded-full border border-white/15 transition-transform duration-200 ease-out focus-visible:ring-2 focus-visible:ring-stone-200 focus-visible:outline-none active:scale-95 ${
               selected
-                ? 'scale-110 ring-2 ring-stone-100 ring-offset-2 ring-offset-black/30'
-                : 'hover:scale-105'
+                ? 'scale-105 ring-2 ring-stone-100 ring-offset-2 ring-offset-black/30'
+                : 'hover:scale-110'
             }`}
             style={{ backgroundColor: swatch.hex }}
           />
         )
       })}
+      {/* The name, not just the chip: "Nero" and "Blu" are two near-blacks on a
+          dark tray, and colour alone must not carry the selection. */}
+      <span aria-live="polite" className="ml-1 min-w-[3.5rem] font-mono text-[0.65rem] tracking-[0.18em] text-stone-200 uppercase">
+        {selectedName}
+      </span>
     </div>
   )
 }

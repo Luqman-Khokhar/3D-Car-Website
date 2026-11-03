@@ -7,6 +7,7 @@ import type { MergedGroup } from '@/lib/mergeParts'
 import type { CarMaterials } from '@/hooks/useCarMaterials'
 import { registerBone, clearBoneRegistry } from '@/animations/boneRegistry'
 import { BONE_STOW_SCALE, boneStowPosition } from '@/animations/robotPose'
+import { CONTACT_LAYER_MASK } from './CarContactShadow'
 
 interface BoneGroupProps {
   bone: RobotBone
@@ -51,6 +52,7 @@ const BoneGroup = memo(function BoneGroup({ bone, groups, materials }: BoneGroup
           material={materials[group.material]}
           castShadow
           receiveShadow
+          layers-mask={CONTACT_LAYER_MASK}
         />
       ))}
     </group>

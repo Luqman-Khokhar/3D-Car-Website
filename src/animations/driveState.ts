@@ -51,3 +51,14 @@ const CHASE_ENGAGE_Z = DOOR_Z - 3
 export function isCarAway(): boolean {
   return driveState.z > CHASE_ENGAGE_Z
 }
+
+/** Depth past the door plane over which the world fades to white as the car
+ *  drives out — see NightPass. Short enough that the whiteout reads as the
+ *  car passing through the doorway, not a lingering cross-fade. */
+const OUTSIDE_FADE_DEPTH = 4
+
+/** How far past the door the car is, 0..1: the ramp the outside air, the fog
+ *  range and the sun all ride, so the light and the haze arrive together. */
+export function outsideBlend(): number {
+  return Math.min(Math.max((driveState.z - DOOR_Z) / OUTSIDE_FADE_DEPTH, 0), 1)
+}

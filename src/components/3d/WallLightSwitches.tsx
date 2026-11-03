@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { CylinderGeometry } from 'three'
 import type { Mesh } from 'three'
@@ -7,6 +7,8 @@ import { buildGeometry, createMaterial, MATERIAL_SPECS } from './Garage'
 import { useEnvironmentMap } from './environmentContext'
 import { useSceneStore, LIGHT_SWITCH_GROUPS } from '@/store/useSceneStore'
 import type { LightSwitchGroup, LightSwitchState } from '@/store/useSceneStore'
+import { requestFrame } from '@/lib/frame'
+import { useHoverCursor } from '@/lib/hoverCursor'
 
 /** Lit colour per circuit, matched to what each one actually throws — see
  *  GarageLights.tsx. Off (and the untouched `auto` resting state, which reads
@@ -65,7 +67,7 @@ const WallSwitch = memo(function WallSwitch({
 
   const capRef = useRef<Mesh>(null)
   const press = useRef(0)
-  const [hovered, setHovered] = useState(false)
+  const hover = useHoverCursor()
 
   const parts = useMemo(() => {
     const housing = createMaterial(MATERIAL_SPECS.darkMetal, envMap)
@@ -84,15 +86,10 @@ const WallSwitch = memo(function WallSwitch({
     }
   }, [parts])
 
-  useEffect(() => {
-    document.body.style.cursor = hovered ? 'pointer' : 'auto'
-    return () => {
-      document.body.style.cursor = 'auto'
-    }
-  }, [hovered])
-
   useFrame((_, delta) => {
     press.current *= Math.pow(0.0008, delta)
+    if (press.current < 0.002) press.current = 0
+    else requestFrame()
     if (capRef.current) capRef.current.position.z = -0.045 + press.current * 0.02
   })
 
@@ -104,15 +101,12 @@ const WallSwitch = memo(function WallSwitch({
         geometry={parts.capGeo}
         position={[0, 0, -0.045]}
         rotation={[Math.PI / 2, 0, 0]}
-        onPointerOver={(e) => {
-          e.stopPropagation()
-          setHovered(true)
-        }}
-        onPointerOut={() => setHovered(false)}
+        {...hover}
         onClick={(e) => {
           e.stopPropagation()
           press.current = 1
           cycleLightSwitch(group)
+          requestFrame()
         }}
       >
         <meshBasicMaterial color={capColor(group, state)} toneMapped={false} />

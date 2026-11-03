@@ -10,6 +10,8 @@ import type { CarMaterials } from '@/hooks/useCarMaterials'
 import { registerPart, clearRegistry } from '@/animations/partRegistry'
 import { driveState } from '@/animations/driveState'
 import { useSceneStore } from '@/store/useSceneStore'
+import { carMotion, requestFrame } from '@/lib/frame'
+import { CONTACT_LAYER_MASK } from './CarContactShadow'
 import { RobotRig } from './RobotRig'
 
 /** Per-second fraction of the remaining gap closed while easing the car back
@@ -48,6 +50,9 @@ const PartGroup = memo(function PartGroup({ part, groups, materials }: PartGroup
           material={materials[group.material]}
           castShadow
           receiveShadow
+          // Also on the contact-shadow layer, so that pass draws the car and
+          // nothing else — see CarContactShadow.
+          layers-mask={CONTACT_LAYER_MASK}
         />
       ))}
     </group>
@@ -107,9 +112,19 @@ export function ProceduralCar() {
         driveState.z = 0
         driveState.yaw = 0
         driveState.returning = false
+      } else {
+        requestFrame()
       }
     }
 
+    if (
+      group.position.x !== driveState.x ||
+      group.position.z !== driveState.z ||
+      group.rotation.y !== driveState.yaw
+    ) {
+      // The shadow map and the contact shadow re-render off this.
+      carMotion.version++
+    }
     group.position.set(driveState.x, 0, driveState.z)
     group.rotation.y = driveState.yaw
   })

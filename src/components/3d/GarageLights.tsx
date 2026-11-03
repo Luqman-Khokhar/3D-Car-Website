@@ -1,12 +1,18 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { lazy, useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Object3D } from 'three'
-import type { AmbientLight, DirectionalLight, HemisphereLight, PointLight, RectAreaLight, SpotLight } from 'three'
-import { lightingState, roomDim } from '@/animations/lightingState'
+import { Color, Object3D, Vector3 } from 'three'
+import type { AmbientLight, DirectionalLight, HemisphereLight, PointLight, SpotLight } from 'three'
+import { lightingState, roomDim, stripRowLevel } from '@/animations/lightingState'
+import { outsideBlend } from '@/animations/driveState'
 import { GARAGE_WALL, GARAGE_FLOOR } from '@/scenes/palette'
-import { ROOM_HEIGHT } from '@/scenes/garage'
 import { useSceneStore } from '@/store/useSceneStore'
 import type { LightSwitchState } from '@/store/useSceneStore'
+import { requestFrame } from '@/lib/frame'
+
+/** The six area lights and their 241 kB LTC tables, only fetched by the high
+ *  tier. Mounted inside the canvas' scene Suspense, so the first frame waits for
+ *  it and shaders compile once with the final light count. */
+const CeilingStrips = lazy(() => import('./CeilingStrips'))
 
 /**
  * How much of each light survives a full blackout (`dim === 1`).
@@ -20,10 +26,17 @@ import type { LightSwitchState } from '@/store/useSceneStore'
 const FIXTURE_FLOOR = 0.03
 const FILL_FLOOR = 0.05
 
-/** Peak candela of one headlight beam at `frontGlow === 1`. */
-const BEAM_INTENSITY = 78
+/** Peak candela of the headlight beam at `frontGlow === 1`. One spot on the car's
+ *  centreline rather than one per lamp: the two cones overlapped into a single
+ *  pool by the time they reached the floor, and every light in the scene is paid
+ *  for by every lit fragment on screen whether it is switched on or not — at zero
+ *  intensity included. Wider and brighter than either of the old pair so the
+ *  pool keeps its width and its centre. */
+const BEAM_INTENSITY = 130
 /**
- * Peak intensity of the red wash one half of the tail lamp throws behind the car.
+ * Peak intensity of the red wash the tail lamp throws behind the car — one light
+ * on the centreline now, for the same light-count reason as the beam above, so
+ * this is a little over one old half's worth rather than two.
  *
  * Very low. The lens is a large emissive panel and carries the shot on its own;
  * this only has to put a hint of red on the bumper and the floor. Every value
@@ -31,14 +44,7 @@ const BEAM_INTENSITY = 78
  * red, which turns the shot into a colour filter over a car rather than a car
  * with its lights on.
  */
-const TAIL_WASH_INTENSITY = 0.22
-
-/** Ceiling strip fixture grid, mirroring `ceilingLights()` in
- *  src/scenes/garage.ts and `LAMP_X`/`LAMP_Z` in GarageEnvironment.tsx — all
- *  three have to stay in step so every tube the viewer sees overhead is one
- *  that actually lights the floor beneath it. */
-const STRIP_X = [-3.4, 1.6]
-const STRIP_Z = [-4.6, 1.4, 6.2]
+const TAIL_WASH_INTENSITY = 0.3
 
 /** Baseline intensities, so the dim driver has something to scale against
  *  without re-reading JSX defaults. Must stay in step with the elements below. */
@@ -49,8 +55,22 @@ const BASE = {
   bounce: 0.42,
   doorFill: 0.5,
   ceilingBounce: 0.38,
-  strip: 22,
 }
+
+/**
+ * The door-side fill doubles as the sun on the circuit. It used to be a separate
+ * directional light that sat at zero intensity for the whole scroll story and
+ * was still paid for by every lit pixel; the fill's own job ends where the sun's
+ * begins (once the car is through the door the room fixtures are behind it), so
+ * one light now slides from one role to the other on the same ramp as the
+ * outside air. Deliberately not dimmed by the blackout once outside: outside is
+ * daylight, the same reason OutsideWorld and RaceTrack are unlit.
+ */
+const DOOR_FILL_POSITION = new Vector3(2, 4, 9)
+const DOOR_FILL_COLOR = new Color('#e8e2d0')
+const SUN_POSITION = new Vector3(16, 24, -9)
+const SUN_COLOR = new Color('#fff4e4')
+const SUN_INTENSITY = 1.35
 
 function level(dim: number, floor: number) {
   return 1 - (1 - floor) * dim
@@ -63,8 +83,13 @@ function level(dim: number, floor: number) {
  */
 export const CEILING_FADE = 0.35
 
+/** Below this the approach snaps, so a fade has a last frame instead of an
+ *  asymptote — the demand-driven render loop stops asking for frames there. */
+const APPROACH_EPSILON = 0.001
+
 export function approach(current: number, target: number, dt: number, tau: number) {
-  return current + (target - current) * (1 - Math.exp(-dt / tau))
+  const next = current + (target - current) * (1 - Math.exp(-dt / tau))
+  return Math.abs(target - next) < APPROACH_EPSILON ? target : next
 }
 
 /** null = follow the scroll-scrubbed atmosphere untouched; 0/1 = a thrown switch. */
@@ -90,7 +115,7 @@ export function switchTarget(state: LightSwitchState): number | null {
  * mid-scroll recompiles every material in the frame it appears — a visible hitch
  * at exactly the moment the scene is meant to be at its most dramatic.
  */
-export function GarageLights({ lowPower }: { lowPower: boolean }) {
+export function GarageLights({ shadows, areaLights }: { shadows: boolean; areaLights: boolean }) {
   const tubeBackSwitch = useSceneStore((s) => s.lightSwitches.tubeBack)
   const tubeMidSwitch = useSceneStore((s) => s.lightSwitches.tubeMid)
   const tubeFrontSwitch = useSceneStore((s) => s.lightSwitches.tubeFront)
@@ -108,22 +133,18 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
   const bounce = useRef<DirectionalLight>(null)
   const doorFill = useRef<DirectionalLight>(null)
   const ceilingBounce = useRef<DirectionalLight>(null)
-  const stripRefs = useRef<(RectAreaLight | null)[]>([])
-  const beamL = useRef<SpotLight>(null)
-  const beamR = useRef<SpotLight>(null)
-  const tailL = useRef<PointLight>(null)
-  const tailR = useRef<PointLight>(null)
+  const beam = useRef<SpotLight>(null)
+  const tail = useRef<PointLight>(null)
 
   // A spotlight aims at its `target`, which defaults to an Object3D at the world
-  // origin — i.e. straight back into the car it is mounted on. These sit well
-  // ahead of the nose so the beams throw down the bay, and they are mounted via
+  // origin — i.e. straight back into the car it is mounted on. This sits well
+  // ahead of the nose so the beam throws down the bay, and it is mounted via
   // <primitive> below because a target only tracks if it is in the scene graph.
-  const beamTargets = useMemo(() => [new Object3D(), new Object3D()], [])
+  const beamTarget = useMemo(() => new Object3D(), [])
 
   useEffect(() => {
-    if (beamL.current) beamL.current.target = beamTargets[0]
-    if (beamR.current) beamR.current.target = beamTargets[1]
-  }, [beamTargets])
+    if (beam.current) beam.current.target = beamTarget
+  }, [beamTarget])
 
   useFrame((_state, dt) => {
     const { dim, rearGlow, frontGlow } = lightingState
@@ -141,6 +162,14 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     if (backTarget !== null) backLevel.current = approach(backLevel.current, backTarget, dt, CEILING_FADE)
     if (midTarget !== null) midLevel.current = approach(midLevel.current, midTarget, dt, CEILING_FADE)
     if (frontTarget !== null) frontLevel.current = approach(frontLevel.current, frontTarget, dt, CEILING_FADE)
+    // Still fading toward a thrown switch: keep the demand loop drawing.
+    if (
+      (backTarget !== null && backLevel.current !== backTarget) ||
+      (midTarget !== null && midLevel.current !== midTarget) ||
+      (frontTarget !== null && frontLevel.current !== frontTarget)
+    ) {
+      requestFrame()
+    }
 
     // Each row lights its own pair of strips independently...
     const backFixture = backTarget !== null ? backLevel.current : fixtureAuto
@@ -166,26 +195,25 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
     // through a manual blackout while every other fixture obeyed the switches.
     if (spot.current) spot.current.intensity = BASE.spot * fixture
     if (bounce.current) bounce.current.intensity = BASE.bounce * fixture
-    if (doorFill.current) doorFill.current.intensity = BASE.doorFill * fixture
+    if (doorFill.current) {
+      const sun = outsideBlend()
+      const light = doorFill.current
+      light.intensity = BASE.doorFill * fixture * (1 - sun) + SUN_INTENSITY * sun
+      light.position.lerpVectors(DOOR_FILL_POSITION, SUN_POSITION, sun)
+      light.color.lerpColors(DOOR_FILL_COLOR, SUN_COLOR, sun)
+    }
     if (ceilingBounce.current) ceilingBounce.current.intensity = BASE.ceilingBounce * fixture
-    // STRIP_Z is [back, mid, front] and stripRefs is flattened x-major (see the
-    // JSX below), so each ref's row is its flat index mod STRIP_Z.length.
-    const rowFixture = [backFixture, midFixture, frontFixture]
-    stripRefs.current.forEach((strip, i) => {
-      if (strip) strip.intensity = BASE.strip * rowFixture[i % STRIP_Z.length]
-    })
+    // Area lights read this from their own chunk; see CeilingStrips.
+    stripRowLevel[0] = backFixture
+    stripRowLevel[1] = midFixture
+    stripRowLevel[2] = frontFixture
 
     // The car's own lamps run the other way: they are worth nothing in a lit room
     // and everything in a dark one, so the drive is the glow channel scaled by how
     // dark it has got. Without the `dim` term the beams wash out the garage during
     // the scenes either side, where the lamps are installed but the lights are on.
-    const beam = BEAM_INTENSITY * frontGlow * dim
-    if (beamL.current) beamL.current.intensity = beam
-    if (beamR.current) beamR.current.intensity = beam
-
-    const wash = TAIL_WASH_INTENSITY * rearGlow * dim
-    if (tailL.current) tailL.current.intensity = wash
-    if (tailR.current) tailR.current.intensity = wash
+    if (beam.current) beam.current.intensity = BEAM_INTENSITY * frontGlow * dim
+    if (tail.current) tail.current.intensity = TAIL_WASH_INTENSITY * rearGlow * dim
   })
 
   return (
@@ -208,7 +236,7 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
         angle={0.62}
         penumbra={0.85}
         intensity={BASE.spot}
-        castShadow={!lowPower}
+        castShadow={shadows}
         // 1024 rather than the old 512: with ambient no longer washing the
         // scene out, the car's own shadows onto itself — hood onto bay, roof
         // onto side glass — actually read, and at 512 they were mush.
@@ -225,7 +253,7 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
           wall faces +Z, and neither the -Z directional above nor the tight
           spotlight cone reaches it, so without this it renders ambient-only
           and every prop on it reads as a dark smudge. */}
-      <directionalLight ref={doorFill} position={[2, 4, 9]} intensity={BASE.doorFill} color="#e8e2d0" />
+      <directionalLight ref={doorFill} position={DOOR_FILL_POSITION.toArray()} intensity={BASE.doorFill} color={DOOR_FILL_COLOR} />
       {/* Light travelling upward, standing in for the floor bounce.
           Everything facing down — the ceiling deck, the underside of every joist,
           the shelf soffits, the flange of the door track — is lit by nothing
@@ -239,82 +267,45 @@ export function GarageLights({ lowPower }: { lowPower: boolean }) {
         intensity={BASE.ceilingBounce}
         color="#d8d0c0"
       />
-      {/* All six ceiling fluorescents, as actual area lights rather than
-          emissive props. A point or spot light can only ever put a round
-          hotspot on a panel; a strip puts a long streak down the flank, and
-          that streak is the most recognisable thing in any photograph of a
-          car. Positions match ceilingLights() in src/scenes/garage.ts, so
-          every fixture the viewer can see overhead actually throws light —
-          previously only the middle row (z=1.4) did, so the other two rows
-          of tubes glowed without the floor or car reading as lit by them.
-
-          Rotating -PI/2 about X aims the light down and lays its height axis
-          along Z, i.e. along the car. Area lights cannot cast shadows and are
-          the most expensive light type per fragment, so all six are skipped
-          entirely on low power, same as the original two. */}
-      {!lowPower &&
-        STRIP_X.map((x, xi) =>
-          STRIP_Z.map((z, zi) => (
-            <rectAreaLight
-              key={`${xi}-${zi}`}
-              ref={(el) => {
-                stripRefs.current[xi * STRIP_Z.length + zi] = el
-              }}
-              position={[x, ROOM_HEIGHT - 0.24, z]}
-              rotation={[-Math.PI / 2, 0, 0]}
-              width={0.3}
-              height={2.4}
-              intensity={BASE.strip}
-              color="#fff4de"
-            />
-          )),
-        )}
-      {/* --- The car's headlights as real light sources. Emissive geometry plus
+      {/* Six ceiling strips as RectAreaLights — high tier only, and in their own
+          chunk; see CeilingStrips for why they exist and what they cost. */}
+      {areaLights && <CeilingStrips />}
+      {/* --- The car's headlights as a real light source. Emissive geometry plus
           bloom makes a lamp look lit; only an actual beam makes the room look lit
-          *by* it, and the second is what sells the blackout — two cones on the
-          floor ahead of the nose, and the far wall picking up a pool.
+          *by* it, and the second is what sells the blackout — a pool on the
+          floor ahead of the nose, and the far wall picking it up.
 
-          Mounted at the lens positions from `lamps_front` in carParts.ts and aimed
-          at targets 14 m down the bay, which is past the +Z wall at 9.6 so the
-          cones stay wide open across the whole throw. No shadows: a shadow-casting
-          spotlight is the most expensive light in the scene and there is nothing
-          between these and the floor to occlude. */}
-      <primitive object={beamTargets[0]} position={[-0.9, 0.1, 14]} />
-      <primitive object={beamTargets[1]} position={[0.9, 0.1, 14]} />
+          Mounted on the car's centreline at lens height from `lamps_front` in
+          carParts.ts and aimed at a target 14 m down the bay, which is past the
+          +Z wall at 9.6 so the cone stays wide open across the whole throw. No
+          shadows: a shadow-casting spotlight is the most expensive light in the
+          scene and there is nothing between this and the floor to occlude. */}
+      <primitive object={beamTarget} position={[0, 0.1, 14]} />
       <spotLight
-        ref={beamL}
-        position={[-0.58, 0.75, 2.06]}
-        angle={0.42}
-        penumbra={0.65}
+        ref={beam}
+        position={[0, 0.75, 2.06]}
+        angle={0.5}
+        penumbra={0.7}
         intensity={0}
         distance={26}
         decay={1.5}
         color="#fff0d2"
       />
-      <spotLight
-        ref={beamR}
-        position={[0.58, 0.75, 2.06]}
-        angle={0.42}
-        penumbra={0.65}
-        intensity={0}
-        distance={26}
-        decay={1.5}
-        color="#fff0d2"
-      />
-      {/* Tail lamp spill. Point lights rather than spots: the lamp's job here is to
-          stain the bumper, the plate and the floor immediately behind the car red,
-          not to throw a beam. Short `distance` keeps that wash local so it never
-          tints the back wall — at anything longer the inverse-square falloff still
-          reaches the roof and the whole car turns pink.
+      {/* Tail lamp spill. A point light rather than a spot: the lamp's job here is
+          to stain the bumper, the plate and the floor immediately behind the car
+          red, not to throw a beam. Short `distance` keeps that wash local so it
+          never tints the back wall — at anything longer the inverse-square falloff
+          still reaches the roof and the whole car turns pink. One on the
+          centreline rather than one per side, for the same light-count reason as
+          the beam above.
 
-          Kept well clear of the lens — below it and outboard of the bumper face.
+          Kept well clear of the lens — below it and behind the bumper face.
           A lamp must not light its own lens, and with decay 2 a light sitting
           100 mm off the panel puts an irradiance of ~45 on it: the lens then reads
           as a lit surface rather than a glowing one, and no change to its emissive
           moves it at all, because the emissive stopped being what you were looking
           at. That bug cost an afternoon; the distance is the fix. */}
-      <pointLight ref={tailL} position={[-0.55, 0.7, -2.6]} intensity={0} distance={3.2} decay={2} color="#ff2a18" />
-      <pointLight ref={tailR} position={[0.55, 0.7, -2.6]} intensity={0} distance={3.2} decay={2} color="#ff2a18" />
+      <pointLight ref={tail} position={[0, 0.7, -2.6]} intensity={0} distance={3.2} decay={2} color="#ff2a18" />
     </>
   )
 }

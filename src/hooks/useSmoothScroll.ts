@@ -2,26 +2,7 @@ import { useEffect } from 'react'
 import Lenis from 'lenis'
 import { gsap, ScrollTrigger } from '@/lib/gsap'
 import { scrollSpeedMultiplier, useSceneStore } from '@/store/useSceneStore'
-
-let lenisInstance: Lenis | null = null
-
-/** Escape hatch for imperative scrolling (e.g. the hero "scroll to begin" cue). */
-export function getLenis() {
-  return lenisInstance
-}
-
-/**
- * Returns to the top, replaying the whole assembly in reverse on the way.
- * Falls back to native scrolling under reduced motion, where Lenis never mounts.
- */
-export function scrollToTop() {
-  const lenis = lenisInstance
-  if (lenis) {
-    lenis.scrollTo(0, { duration: 2.4 })
-    return
-  }
-  window.scrollTo({ top: 0, behavior: 'auto' })
-}
+import { setLenis } from '@/lib/scroll'
 
 /**
  * Mounts Lenis once and hands frame control to GSAP's ticker so ScrollTrigger
@@ -68,7 +49,7 @@ export function useSmoothScroll() {
       syncTouch: false,
       wheelMultiplier: scrollSpeedMultiplier(useSceneStore.getState().scrollSpeed),
     })
-    lenisInstance = lenis
+    setLenis(lenis)
 
     // Live pacing changes. Mutating options is cheaper than tearing Lenis down
     // and rebuilding it, which would drop the current scroll position and force
@@ -97,7 +78,7 @@ export function useSmoothScroll() {
       lenis.off('scroll', onScroll)
       gsap.ticker.remove(raf)
       lenis.destroy()
-      lenisInstance = null
+      setLenis(null)
     }
   }, [])
 }

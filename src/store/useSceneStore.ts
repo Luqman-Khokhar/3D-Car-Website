@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { setPaintTarget } from '@/animations/paintState'
 import { BODY } from '@/scenes/palette'
+import type { QualityTier } from '@/lib/quality'
 
 /** Ordered narrative sections. Index is the scroll order. */
 export const SECTIONS = [
@@ -112,8 +112,19 @@ interface SceneState {
   modelReady: boolean
   /** drei useProgress mirror, 0..100. */
   loadProgress: number
-  /** Set by useDeviceTier; downgrades particles/post-processing. */
-  lowPower: boolean
+  /** Render tier. Seeded by useDeviceTier from the GPU, then possibly stepped
+   *  down by AdaptiveQuality once it has measured real frames. */
+  quality: QualityTier
+  /** False until useDeviceTier has run; the canvas waits on it so it never
+   *  mounts once at a guessed tier and then rebuilds at the real one. */
+  qualityKnown: boolean
+  /** True when the tier came from an override or an earlier calibration. */
+  qualityTrusted: boolean
+  /** AdaptiveQuality has settled on a tier. Last thing the loading gate waits on. */
+  sceneSettled: boolean
+  /** False until every shader has been compiled up front; the canvas holds its
+   *  frame loop at 'never' until then. See AdaptiveQuality. */
+  renderEnabled: boolean
   prefersReducedMotion: boolean
   /**
    * Free-look ("360") mode. While true the scripted camera is suspended, page
@@ -149,7 +160,9 @@ interface SceneState {
   setScrollProgress: (p: number) => void
   setModelReady: (ready: boolean) => void
   setLoadProgress: (p: number) => void
-  setLowPower: (low: boolean) => void
+  setQuality: (tier: QualityTier, trusted?: boolean) => void
+  setSceneSettled: (settled: boolean) => void
+  setRenderEnabled: (enabled: boolean) => void
   setPrefersReducedMotion: (reduced: boolean) => void
   setFreeLook: (on: boolean) => void
   toggleFreeLook: () => void
@@ -166,7 +179,11 @@ export const useSceneStore = create<SceneState>((set) => ({
   scrollProgress: 0,
   modelReady: false,
   loadProgress: 0,
-  lowPower: false,
+  quality: 'medium',
+  qualityKnown: false,
+  qualityTrusted: false,
+  sceneSettled: false,
+  renderEnabled: false,
   prefersReducedMotion: false,
   freeLook: false,
   robotMode: false,
@@ -179,7 +196,10 @@ export const useSceneStore = create<SceneState>((set) => ({
   setScrollProgress: (scrollProgress) => set({ scrollProgress }),
   setModelReady: (modelReady) => set({ modelReady }),
   setLoadProgress: (loadProgress) => set({ loadProgress }),
-  setLowPower: (lowPower) => set({ lowPower }),
+  setQuality: (quality, trusted) =>
+    set((s) => ({ quality, qualityKnown: true, qualityTrusted: trusted ?? s.qualityTrusted })),
+  setSceneSettled: (sceneSettled) => set({ sceneSettled }),
+  setRenderEnabled: (renderEnabled) => set({ renderEnabled }),
   setPrefersReducedMotion: (prefersReducedMotion) => set({ prefersReducedMotion }),
   // Leaving free look drops the robot with it — see the robotMode doc above.
   setFreeLook: (freeLook) => set(freeLook ? { freeLook } : { freeLook, robotMode: false }),
@@ -190,10 +210,9 @@ export const useSceneStore = create<SceneState>((set) => ({
   toggleRobotMode: () =>
     set((s) => (s.robotMode ? { robotMode: false } : { robotMode: true, freeLook: true })),
   setTransforming: (transforming) => set({ transforming }),
-  setBodyColor: (hex) => {
-    setPaintTarget(hex)
-    set({ selectedBodyColor: hex })
-  },
+  // usePaintPass mirrors this into paintState from the 3D side, which keeps three
+  // out of the store and so out of the entry chunk.
+  setBodyColor: (hex) => set({ selectedBodyColor: hex }),
   setScrollSpeed: (scrollSpeed) => {
     try {
       localStorage.setItem(SCROLL_SPEED_KEY, scrollSpeed)
