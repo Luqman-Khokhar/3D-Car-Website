@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { CylinderGeometry } from 'three'
 import type { BufferGeometry, Group, Material, Mesh, Texture } from 'three'
@@ -15,12 +15,19 @@ import { lightingState } from '@/animations/lightingState'
 import { useEnvironmentMap } from './environmentContext'
 import { WallLightSwitches } from './WallLightSwitches'
 import { OutsideWorld } from './OutsideWorld'
+import { requestFrame } from '@/lib/frame'
+import { useHoverCursor } from '@/lib/hoverCursor'
 
 /** How fast the chain eases toward its target, as the fraction of the remaining
  *  gap closed per second — same framerate-independent form as CameraRig's
  *  return-to-scripted ease. Tuned for a door that visibly accelerates and
  *  settles rather than snapping, without making the user wait it out. */
 const DOOR_SMOOTHING = 0.4
+/** Arc-length fraction below which the door counts as arrived and snaps, so the
+ *  demand-driven render loop gets a last frame instead of an asymptote. */
+const DOOR_EPSILON = 0.0005
+/** Same, for the push-button cap's press decay. */
+const PRESS_EPSILON = 0.002
 
 /** Every material a piece of the moving leaf can use, built once and shared —
  *  mirrors how Garage.tsx batches the static room by material. */
@@ -70,6 +77,8 @@ export const GarageDoor = memo(function GarageDoor() {
     const target = garageDoorState.open ? 1 : 0
     const t = 1 - Math.pow(DOOR_SMOOTHING, delta)
     garageDoorState.progress += (target - garageDoorState.progress) * t
+    if (Math.abs(target - garageDoorState.progress) < DOOR_EPSILON) garageDoorState.progress = target
+    else requestFrame()
 
     for (let i = 0; i < DOOR_PANELS.length; i++) {
       const group = groupRefs.current[i]
@@ -141,7 +150,7 @@ const DoorButton = memo(function DoorButton() {
   const envMap = useEnvironmentMap()
   const capRef = useRef<Mesh>(null)
   const press = useRef(0)
-  const [hovered, setHovered] = useState(false)
+  const hover = useHoverCursor()
 
   const parts = useMemo(() => {
     const housing = createMaterial(MATERIAL_SPECS.darkMetal, envMap)
@@ -163,15 +172,10 @@ const DoorButton = memo(function DoorButton() {
     }
   }, [parts])
 
-  useEffect(() => {
-    document.body.style.cursor = hovered ? 'pointer' : 'auto'
-    return () => {
-      document.body.style.cursor = 'auto'
-    }
-  }, [hovered])
-
   useFrame((_, delta) => {
     press.current *= Math.pow(0.0008, delta)
+    if (press.current < PRESS_EPSILON) press.current = 0
+    else requestFrame()
     // Local to the button's own group (BUTTON_POSITION), not world space. -z is
     // toward the room on this wall (see DOOR_Z), so the cap rests proud of the
     // housing and eases back toward it on a press.
@@ -187,15 +191,12 @@ const DoorButton = memo(function DoorButton() {
         material={parts.cap}
         position={[0, 0, -0.05]}
         rotation={[Math.PI / 2, 0, 0]}
-        onPointerOver={(e) => {
-          e.stopPropagation()
-          setHovered(true)
-        }}
-        onPointerOut={() => setHovered(false)}
+        {...hover}
         onClick={(e) => {
           e.stopPropagation()
           press.current = 1
           toggleGarageDoor()
+          requestFrame()
         }}
       />
     </group>

@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
 import { driveState, isCarAway } from '@/animations/driveState'
+import { requestFrame } from '@/lib/frame'
 
 /** Per-second fraction of the remaining gap closed — same exponential form as
  *  CameraRig's RETURN_SMOOTHING, tuned faster since this is chasing a moving
@@ -69,6 +70,14 @@ export function DriveCamera() {
     camera.position.lerp(desiredPos, t)
     lookAt.current.lerp(desiredLook, t)
     camera.lookAt(lookAt.current)
+    // Still swinging onto the chase framing: keep the demand loop drawing. Once
+    // the car is parked and the camera has caught up, frames stop.
+    if (
+      camera.position.distanceToSquared(desiredPos) > 1e-6 ||
+      lookAt.current.distanceToSquared(desiredLook) > 1e-6
+    ) {
+      requestFrame()
+    }
   })
 
   return null

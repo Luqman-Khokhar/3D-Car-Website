@@ -1,35 +1,22 @@
 import { useEffect } from 'react'
 import { useSceneStore } from '@/store/useSceneStore'
-
-/** Manual override, e.g. ?lowpower=1 for testing the degraded path on a fast machine. */
-function forcedLowPower() {
-  return new URLSearchParams(window.location.search).has('lowpower')
-}
-
-function detectWebGL2() {
-  try {
-    const canvas = document.createElement('canvas')
-    return !!canvas.getContext('webgl2')
-  } catch {
-    return false
-  }
-}
+import { QUALITY, detectInitialQuality } from '@/lib/quality'
 
 /**
- * Classifies the device once on mount. Low power drops particles and
- * post-processing rather than swapping the whole experience.
+ * Picks the starting render tier once on mount — see src/lib/quality.ts — and
+ * starts fetching the tier's optional chunks right away, in parallel with the
+ * main 3D bundle, rather than after the canvas mounts and asks for them.
+ *
+ * Runs in an effect rather than at store creation: probing the GPU means creating
+ * a WebGL context, which is not free, and the loading screen should paint first.
  */
 export function useDeviceTier() {
   useEffect(() => {
-    if (forcedLowPower()) {
-      useSceneStore.getState().setLowPower(true)
-      return
-    }
+    const { tier, trusted } = detectInitialQuality()
+    useSceneStore.getState().setQuality(tier, trusted)
 
-    const cores = navigator.hardwareConcurrency ?? 4
-    const coarsePointer = window.matchMedia('(pointer: coarse)').matches
-    const low = !detectWebGL2() || cores <= 4 || (coarsePointer && cores <= 6)
-
-    useSceneStore.getState().setLowPower(low)
+    const settings = QUALITY[tier]
+    if (settings.post) void import('@/components/3d/PostFX')
+    if (settings.areaLights) void import('@/components/3d/CeilingStrips')
   }, [])
 }

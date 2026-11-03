@@ -1,10 +1,11 @@
 import { memo, useEffect, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import {
   BoxGeometry,
   CylinderGeometry,
   TorusGeometry,
   Euler,
+  Frustum,
   Matrix4,
   MeshLambertMaterial,
   MeshStandardMaterial,
@@ -21,6 +22,7 @@ import { GARAGE_WALL } from '@/scenes/palette'
 import { createWallSurfaceMaps } from '@/lib/surfaceTextures'
 import { lightingState } from '@/animations/lightingState'
 import { useSceneStore } from '@/store/useSceneStore'
+import { requestFrame } from '@/lib/frame'
 import { approach, CEILING_FADE, switchTarget } from './GarageLights'
 import { useEnvironmentMap } from './environmentContext'
 
@@ -170,8 +172,12 @@ export function createMaterial(spec: MaterialSpec, envMap: Texture | null, plast
   if (matte) {
     const material = new MeshLambertMaterial({
       color: plaster ? '#ffffff' : params.color,
-      emissive: params.emissive,
-      emissiveIntensity: params.emissiveIntensity,
+      // Only when set: three warns on every explicitly-undefined parameter, which
+      // was eighteen console warnings on every load.
+      ...(params.emissive !== undefined && {
+        emissive: params.emissive,
+        emissiveIntensity: params.emissiveIntensity,
+      }),
     })
     if (plaster) {
       material.map = plaster.map
@@ -211,6 +217,7 @@ function handGeometry(length: number, width: number, depth: number): BufferGeome
  */
 const WallClock = memo(function WallClock() {
   const envMap = useEnvironmentMap()
+  const get = useThree((s) => s.get)
   const hour = useRef<Group>(null)
   const minute = useRef<Group>(null)
   const second = useRef<Group>(null)
@@ -238,6 +245,29 @@ const WallClock = memo(function WallClock() {
       parts.cap.dispose()
     }
   }, [parts])
+
+  // The render loop is demand-driven, so the clock has to ask for its own frame
+  // when the second hand steps — but only while it is actually in shot. Reading
+  // the copy with the camera parked on the car costs nothing; parked facing the
+  // clock costs one frame a second.
+  useEffect(() => {
+    const frustum = new Frustum()
+    const viewProjection = new Matrix4()
+    const face = new Vector3(...CLOCK_FACE_CENTER)
+    let timer = 0
+    const schedule = () => {
+      timer = window.setTimeout(tick, 1005 - (Date.now() % 1000))
+    }
+    const tick = () => {
+      const { camera } = get()
+      viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+      frustum.setFromProjectionMatrix(viewProjection)
+      if (frustum.containsPoint(face)) requestFrame()
+      schedule()
+    }
+    schedule()
+    return () => window.clearTimeout(timer)
+  }, [get])
 
   useFrame(() => {
     const now = new Date()
@@ -363,6 +393,8 @@ export const Garage = memo(function Garage() {
     if (backTarget !== null) backLevel.current = approach(backLevel.current, backTarget, dt, CEILING_FADE)
     if (midTarget !== null) midLevel.current = approach(midLevel.current, midTarget, dt, CEILING_FADE)
     if (frontTarget !== null) frontLevel.current = approach(frontLevel.current, frontTarget, dt, CEILING_FADE)
+    // GarageLights runs the same fade and already keeps the demand loop drawing
+    // until it lands, so there is nothing to request here.
     if (!anyTubeThrown && dim === applied.current) {
       return
     }

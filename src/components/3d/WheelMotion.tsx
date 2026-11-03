@@ -5,6 +5,7 @@ import { driveState } from '@/animations/driveState'
 import { getPart } from '@/animations/partRegistry'
 import { WHEEL_RADIUS } from '@/scenes/carParts'
 import type { PartId } from '@/scenes/carParts'
+import { carMotion, requestFrame } from '@/lib/frame'
 
 const FRONT: PartId[] = ['wheel_FL', 'wheel_FR']
 const REAR: PartId[] = ['wheel_RL', 'wheel_RR']
@@ -88,6 +89,13 @@ export function WheelMotion() {
     const roll = (driveState.speed * delta) / WHEEL_RADIUS
     const target = driveState.steer * MAX_STEER
     steer.current += (target - steer.current) * (1 - Math.pow(STEER_SMOOTHING, delta))
+    // Snap the last thousandth of a radian so the rack has a final frame; until
+    // then the demand loop keeps drawing it back to centre.
+    if (Math.abs(target - steer.current) < 0.001) steer.current = target
+    else requestFrame()
+    if (roll !== 0 || entries.some((entry) => entry.front && entry.object.rotation.y !== steer.current)) {
+      carMotion.version++
+    }
 
     for (const entry of entries) {
       // Wrapped, so a long stint at 30 rad/s does not walk the angle out to five

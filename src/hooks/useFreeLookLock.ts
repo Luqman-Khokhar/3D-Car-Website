@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { getLenis } from '@/hooks/useSmoothScroll'
+import { getLenis } from '@/lib/scroll'
 import { useSceneStore } from '@/store/useSceneStore'
 
 /**

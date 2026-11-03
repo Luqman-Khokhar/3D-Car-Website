@@ -1,6 +1,6 @@
 import { SECTION_COPY } from '@/scenes/sections'
 import { useSceneStore } from '@/store/useSceneStore'
-import { scrollToTop } from '@/hooks/useSmoothScroll'
+import { scrollToTop } from '@/lib/scroll'
 
 /**
  * Fixed copy layer. Only `activeSection` is subscribed, and that changes eleven
